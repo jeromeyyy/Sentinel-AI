@@ -1,3 +1,4 @@
+import os
 import time
 from collections import defaultdict, deque
 from typing import Deque, Dict, List, Tuple
@@ -20,8 +21,8 @@ EVENT_CONFIG: Dict[str, Dict] = {
     # 1) Fight / Violence / Crowd formation
     "fight": {
         "window_sec": 5.0,
-        "min_frames": 3,
-        "threshold": 0.65,  # avg confidence in the window
+        "min_frames": 2,
+        "threshold": 0.55,  # avg confidence in the window
         "priority": "high",
         "playbook": {
             "scenario": "fight_violence_crowd",
@@ -52,7 +53,7 @@ EVENT_CONFIG: Dict[str, Dict] = {
     "gate_accident": {
         "window_sec": 4.0,
         "min_frames": 1,
-        "threshold": 0.8,
+        "threshold": 0.55,
         "priority": "critical",
         "playbook": {
             "scenario": "gate_accident",
@@ -101,6 +102,62 @@ EVENT_CONFIG: Dict[str, Dict] = {
             "auto_call_fire_service": True,
             "open_evacuation_map": True,
             "show_muster_point_guidance": True,
+        },
+    },
+    # 7) Vehicle detected at gate
+    "vehicle_detected": {
+        "window_sec": 3.0,
+        "min_frames": 1,
+        "threshold": 0.4,  # Low threshold for informational alerts
+        "priority": "low",
+        "playbook": {
+            "scenario": "vehicle_detected",
+            "log_entry_time": True,
+            "include_snapshot": True,
+            "track_vehicle_id": True,
+        },
+    },
+    # 8) Crowd formation
+    "crowd_formation": {
+        "window_sec": 4.0,
+        "min_frames": 1,
+        "threshold": 0.5,
+        "priority": "medium",
+        "playbook": {
+            "scenario": "crowd_formation",
+            "notify_duty_staff": True,
+            "include_snapshot": True,
+            "monitor_for_escalation": True,
+            "push_live_camera_link": True,
+        },
+    },
+    # 9) Mobile phone usage in classroom
+    "mobile_usage": {
+        "window_sec": 5.0,
+        "min_frames": 1,
+        "threshold": 0.4,
+        "priority": "low",
+        "playbook": {
+            "scenario": "mobile_usage",
+            "log_violation": True,
+            "include_snapshot": True,
+            "notify_teacher": True,
+        },
+    },
+    # 10) Weapon detected (CRITICAL)
+    "weapon_detected": {
+        "window_sec": 2.0,
+        "min_frames": 1,
+        "threshold": 0.3,  # Very low threshold for weapons
+        "priority": "critical",
+        "playbook": {
+            "scenario": "weapon_detected",
+            "immediate_emergency_alert": True,
+            "notify_security_admin_police": True,
+            "lock_all_zones": True,
+            "push_live_camera_link": True,
+            "include_snapshot": True,
+            "start_high_res_recording": True,
         },
     },
 }
@@ -171,7 +228,18 @@ def process_event(event: Dict) -> Dict:
     # Multi-frame verification
     enough_frames = len(frames) >= config["min_frames"]
     over_threshold = suspicion_score >= config["threshold"]
+
+    # Normal incident decision
     is_incident = bool(enough_frames and over_threshold)
+
+    # Demo override: if DEMO_MODE=1, make it much easier to
+    # generate incidents so that test footage produces visible
+    # alerts quickly in the UI.
+    if os.getenv("DEMO_MODE", "0") == "1":
+        # Any reasonably confident detection from the worker
+        # becomes an incident, regardless of multi-frame checks.
+        if float(event.get("confidence", 0.0)) >= 0.4:
+            is_incident = True
 
     timeline = {}
     if frames:
