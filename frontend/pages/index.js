@@ -21,7 +21,9 @@ import {
   ChevronRight,
   Shield,
   Zap,
-  Eye
+  Eye,
+  LogIn,
+  User
 } from 'lucide-react';
 
 import { Card, CardContent } from '../components/ui/Card';
@@ -59,6 +61,43 @@ export default function LandingPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCamera, setEditingCamera] = useState(null);
   const [cameraHealth, setCameraHealth] = useState({});
+  const [tenantName, setTenantName] = useState('');
+  const [authUser, setAuthUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
+
+  useEffect(() => {
+    if (!authEnabled) {
+      setAuthChecked(true);
+      return;
+    }
+
+    async function loadAuthUser() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/auth/me`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setAuthUser(data.user || null);
+          setAuthChecked(true);
+          return;
+        }
+        setAuthUser(null);
+      } catch {
+        setAuthUser(null);
+      }
+      setAuthChecked(true);
+    }
+
+    loadAuthUser();
+  }, [authEnabled]);
+
+  useEffect(() => {
+    if (!authEnabled || !authChecked) return;
+    if (!authUser) {
+      router.replace('/login');
+    }
+  }, [authEnabled, authChecked, authUser, router]);
 
   // Load current module
   useEffect(() => {
@@ -173,6 +212,30 @@ export default function LandingPage() {
 
   const handleStartMonitoring = async () => {
     setLoading(true);
+
+    if (authEnabled && !authUser) {
+      setLoading(false);
+      router.push('/login');
+      return;
+    }
+
+    if (tenantName.trim()) {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/tenant`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: tenantName.trim(), module: selectedModule }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.tenant) {
+            window.localStorage.setItem('sentinel_tenant', JSON.stringify(data.tenant));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create tenant:', e);
+      }
+    }
     
     // Save config
     const config = { module: selectedModule, cameras };
@@ -207,6 +270,11 @@ export default function LandingPage() {
 
   const activeCount = cameras.filter(c => c.active).length;
   const onlineCount = Object.values(cameraHealth).filter(s => s === 'online').length;
+  const shouldBlock = authEnabled && !authChecked;
+
+  if (shouldBlock) {
+    return <div className="min-h-screen bg-background" />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -229,7 +297,7 @@ export default function LandingPage() {
               </div>
             </div>
             
-            {/* Quick Stats */}
+            {/* Quick Stats + Auth */}
             <div className="hidden md:flex items-center gap-6">
               <div className="text-center">
                 <div className="text-2xl font-bold text-foreground">{cameras.length}</div>
@@ -243,6 +311,24 @@ export default function LandingPage() {
                 <div className="text-2xl font-bold text-blue-400">{onlineCount}</div>
                 <div className="text-xs text-muted-foreground">Online</div>
               </div>
+              {authEnabled && (
+                <div className="ml-4">
+                  {authUser ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <User className="w-4 h-4" />
+                      <span>{authUser.name || authUser.email}</span>
+                    </div>
+                  ) : (
+                    <a
+                      href={`${BACKEND_URL}/auth/google/login`}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm text-foreground hover:bg-muted transition-colors"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Google Login
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -256,6 +342,52 @@ export default function LandingPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 pb-12 space-y-8">
+        {/* Tenant & Setup */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2">
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Organization / Tenant</h2>
+                <p className="text-sm text-muted-foreground">
+                  Add your organization name to initialize tenant context.
+                </p>
+              </div>
+              <Input
+                value={tenantName}
+                onChange={(e) => setTenantName(e.target.value)}
+                placeholder="e.g., Lincoln High School"
+              />
+              {authEnabled && !authUser && (
+                <a
+                  href={`${BACKEND_URL}/auth/google/login`}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm text-foreground hover:bg-muted transition-colors w-fit"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Continue with Google
+                </a>
+              )}
+              <div className="text-xs text-muted-foreground">
+                Optional for now. If provided, a tenant record is created on start.
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Setup Wizard</h2>
+                <p className="text-sm text-muted-foreground">
+                  Step-by-step camera onboarding with stream preview.
+                </p>
+              </div>
+              <Button onClick={() => router.push('/setup')} className="w-full">
+                <ChevronRight className="w-4 h-4 mr-2" />
+                Launch Wizard
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+
         {/* Module Selection */}
         <section>
           <h2 className="text-lg font-semibold text-foreground mb-4">Select Environment</h2>

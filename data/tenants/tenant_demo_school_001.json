@@ -1,0 +1,27 @@
+{
+  "id": "tenant_demo_school_001",
+  "name": "Lincoln High School",
+  "module": "school",
+  "created_at": "2026-02-18T10:00:00Z",
+  "updated_at": "2026-02-18T10:00:00Z",
+  "settings": {
+    "alert_email": "security@lincolnhigh.edu",
+    "alert_threshold": "medium",
+    "recording_enabled": true,
+    "retention_days": 30
+  },
+  "users": [
+    {
+      "id": "user_001",
+      "email": "admin@lincolnhigh.edu",
+      "role": "admin",
+      "created_at": "2026-02-18T10:00:00Z"
+    },
+    {
+      "id": "user_002",
+      "email": "security@lincolnhigh.edu",
+      "role": "operator",
+      "created_at": "2026-02-18T10:05:00Z"
+    }
+  ]
+}

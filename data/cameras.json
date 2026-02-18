@@ -1,0 +1,32 @@
+[
+  {
+    "id": "cam_school_accident_school",
+    "name": "Accident School",
+    "zone": "outgate",
+    "video_path": "C:\\Users\\joshua moses\\SecVidA\\backend\\test_videos\\school\\Accident_school.mp4",
+    "active": true,
+    "source": "test_video",
+    "video_name": "Accident_school.mp4",
+    "module": "school"
+  },
+  {
+    "id": "cam_school_fight_school",
+    "name": "Fight School",
+    "zone": "corridor",
+    "video_path": "C:\\Users\\joshua moses\\SecVidA\\backend\\test_videos\\school\\fight_school.mp4",
+    "active": true,
+    "source": "test_video",
+    "video_name": "fight_school.mp4",
+    "module": "school"
+  },
+  {
+    "id": "cam_school_weapon_sch",
+    "name": "Weapon Sch",
+    "zone": "school_ground",
+    "video_path": "C:\\Users\\joshua moses\\SecVidA\\backend\\test_videos\\school\\Weapon_sch.mp4",
+    "active": true,
+    "source": "test_video",
+    "video_name": "Weapon_sch.mp4",
+    "module": "school"
+  }
+]

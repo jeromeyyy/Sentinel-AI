@@ -35,6 +35,7 @@ import { cn, formatTimestamp, formatRelativeTime, formatEventType, getAlertKey, 
 import AnalyticsCharts from '../components/AnalyticsCharts';
 import AlertPopupNew from '../components/AlertPopupNew';
 import IncidentTimeline from '../components/IncidentTimeline';
+import SettingsPanel from '../components/SettingsPanel';
 
 const TAB_TITLES = {
   monitoring: { title: 'Live Monitoring', subtitle: 'Real-time surveillance and threat detection' },
@@ -214,10 +215,17 @@ export default function MonitorPage() {
         )}
 
         {activeTab === 'settings' && (
-          <SettingsView
+          <motion.div
             key="settings"
-            wsStatus={wsStatus}
-          />
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <SettingsPanel
+              cameras={cameras}
+              incidents={incidents}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
     </DashboardLayout>
@@ -597,55 +605,5 @@ function AnalyticsView({ analytics, incidents, loading }) {
   );
 }
 
-// ─── Settings View ───────────────────────────────────────────────────────────
-function SettingsView({ wsStatus }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="max-w-2xl"
-    >
-      <Card>
-        <CardHeader>
-          <CardTitle>System Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <SettingRow
-            label="Backend URL"
-            description="API endpoint for data"
-            value={<code className="text-xs bg-muted px-2 py-1 rounded">{BACKEND_URL}</code>}
-          />
-          <SettingRow
-            label="WebSocket Status"
-            description="Real-time connection"
-            value={<StatusIndicator status={wsStatus} />}
-          />
-          <SettingRow
-            label="Refresh Rate"
-            description="Data polling interval"
-            value={<span className="text-sm text-muted-foreground">10 seconds</span>}
-          />
-          <SettingRow
-            label="Theme"
-            description="Appearance settings"
-            value={<span className="text-sm text-muted-foreground">System (Dark)</span>}
-          />
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
-function SettingRow({ label, description, value }) {
-  return (
-    <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
-      <div>
-        <div className="text-sm font-medium text-foreground">{label}</div>
-        <div className="text-xs text-muted-foreground">{description}</div>
-      </div>
-      {value}
-    </div>
-  );
-}
+// Settings view now uses SettingsPanel component
 

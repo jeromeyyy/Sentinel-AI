@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import logging
@@ -10,7 +11,8 @@ import io
 import json
 import glob
 from pathlib import Path
-from fastapi.responses import StreamingResponse, JSONResponse
+import uuid
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from reportlab.pdfgen import canvas
 import cv2
 import threading
@@ -18,6 +20,13 @@ import time
 from typing import Dict, List, Optional
 import asyncio
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
+
+from authlib.integrations.starlette_client import OAuth, OAuthError
+from jose import jwt, JWTError
+import redis
+
+from json_store import load_cameras, save_cameras, load_incidents, save_incidents, append_incident, load_tenants, save_tenants
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +39,16 @@ MODULE = os.getenv("MODULE", "school")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "*")  # Set to your Vercel domain in production
+
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+JWT_SECRET = os.getenv("JWT_SECRET", "dev_secret_change_me")
+JWT_EXP_MINUTES = int(os.getenv("JWT_EXP_MINUTES", 60))
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "")
+
+REDIS_URL = os.getenv("REDIS_URL", "")
+JSON_STORE_ENABLED = os.getenv("JSON_STORE_ENABLED", "false").lower() == "true"
 
 VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm")
 ZONE_CYCLE = ["outgate", "corridor", "school_ground", "classroom"]
@@ -73,6 +92,52 @@ except ImportError:
 
 app = FastAPI(title="SentinelAI Backend")
 
+SESSION_COOKIE_NAME = "sentinel_session"
+
+# Session middleware required for OAuth state
+app.add_middleware(SessionMiddleware, secret_key=JWT_SECRET, session_cookie="oauth_state")
+
+# OAuth setup (Google)
+oauth = OAuth()
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    oauth.register(
+        name="google",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+# Optional Redis client for event streaming
+redis_client = None
+if REDIS_URL:
+    try:
+        redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    except Exception as exc:
+        logging.warning(f"Redis init failed: {exc}")
+
+
+def _frontend_base_url() -> str:
+    if FRONTEND_URL and FRONTEND_URL != "*":
+        return FRONTEND_URL.rstrip("/")
+    return "http://localhost:3000"
+
+
+def _create_jwt(user: dict) -> str:
+    exp = datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
+    payload = {"sub": user.get("sub"), "email": user.get("email"), "name": user.get("name"), "exp": exp}
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+def _get_user_from_request(request: Request) -> Optional[dict]:
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        return None
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except JWTError:
+        return None
+
 # Configure CORS - use FRONTEND_URL env var in production
 allowed_origins = ["*"] if FRONTEND_URL == "*" else [
     FRONTEND_URL,
@@ -92,12 +157,58 @@ app.add_middleware(
 # ============================================================================
 alerts_history: List[Dict] = []
 incidents: Dict[str, Dict] = {}
+tenants: Dict[str, Dict] = {}
 active_alert_clients: List[WebSocket] = []
 alert_broadcast_queue: asyncio.Queue = asyncio.Queue()
 
 # Camera/Zone configuration
 camera_configs: Dict[str, Dict] = {}
 selected_module: str = DEFAULT_MODULE
+
+
+def _bootstrap_json_store() -> None:
+    if not JSON_STORE_ENABLED:
+        return
+
+    try:
+        for tenant in load_tenants():
+            if tenant.get("id"):
+                tenants[tenant["id"]] = tenant
+
+        for cam in load_cameras():
+            if cam.get("id"):
+                camera_configs[cam["id"]] = cam
+
+        for item in load_incidents():
+            event = item.get("event") or {}
+            alert = item.get("alert") or {}
+            incident_id = item.get("incident_id") or event.get("event_id")
+            if incident_id:
+                incidents[incident_id] = {"event": event, "alert": alert}
+                alerts_history.append({"event": event, "alert": alert})
+    except Exception as exc:
+        logging.warning(f"JSON store bootstrap failed: {exc}")
+
+
+_bootstrap_json_store()
+
+
+def _persist_cameras() -> None:
+    if not JSON_STORE_ENABLED:
+        return
+    try:
+        save_cameras(list(camera_configs.values()))
+    except Exception as exc:
+        logging.warning(f"Camera JSON save failed: {exc}")
+
+
+def _persist_tenants() -> None:
+    if not JSON_STORE_ENABLED:
+        return
+    try:
+        save_tenants(list(tenants.values()))
+    except Exception as exc:
+        logging.warning(f"Tenant JSON save failed: {exc}")
 
 # Camera sync caching (prevents repeated discovery)
 _camera_sync_cache: Dict[str, float] = {}  # module -> last_sync_timestamp
@@ -310,6 +421,66 @@ def health():
 
 
 # ============================================================================
+# AUTHENTICATION (GOOGLE OAUTH)
+# ============================================================================
+@app.get("/auth/google/login")
+async def auth_google_login(request: Request):
+    if not AUTH_ENABLED:
+        return JSONResponse({"error": "auth_disabled"}, status_code=501)
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return JSONResponse({"error": "oauth_not_configured"}, status_code=500)
+    redirect_uri = GOOGLE_REDIRECT_URI or request.url_for("auth_google_callback")
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/auth/google/callback", name="auth_google_callback")
+async def auth_google_callback(request: Request):
+    if not AUTH_ENABLED:
+        return JSONResponse({"error": "auth_disabled"}, status_code=501)
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        userinfo = token.get("userinfo")
+        if not userinfo:
+            userinfo = await oauth.google.parse_id_token(request, token)
+        if not userinfo:
+            return JSONResponse({"error": "userinfo_not_found"}, status_code=400)
+    except OAuthError as exc:
+        logging.error(f"OAuth error: {exc}")
+        return JSONResponse({"error": "oauth_failed"}, status_code=400)
+
+    jwt_token = _create_jwt(userinfo)
+    response = RedirectResponse(url=f"{_frontend_base_url()}/")
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        jwt_token,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        max_age=JWT_EXP_MINUTES * 60,
+    )
+    return response
+
+
+@app.get("/auth/me")
+async def auth_me(request: Request):
+    if not AUTH_ENABLED:
+        return JSONResponse({"authenticated": False, "auth_enabled": False})
+    user = _get_user_from_request(request)
+    if not user:
+        return JSONResponse({"authenticated": False}, status_code=401)
+    return {"authenticated": True, "user": user}
+
+
+@app.post("/auth/logout")
+async def auth_logout():
+    if not AUTH_ENABLED:
+        return JSONResponse({"success": False, "auth_enabled": False})
+    response = JSONResponse({"success": True})
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    return response
+
+
+# ============================================================================
 # ZONE CONFIGURATION ENDPOINTS
 # ============================================================================
 @app.get("/api/zones")
@@ -343,6 +514,56 @@ async def set_current_module(data: dict):
     }
 
 
+# ============================================================================
+# TENANT MANAGEMENT
+# ============================================================================
+@app.get("/api/tenants")
+def list_tenants():
+    return {"tenants": list(tenants.values())}
+
+
+@app.post("/api/tenant")
+async def create_tenant(data: dict):
+    name = data.get("name")
+    module = data.get("module", selected_module)
+    if not name:
+        return JSONResponse({"error": "name is required"}, status_code=400)
+
+    tenant_id = data.get("id") or f"tenant_{uuid.uuid4().hex[:8]}"
+    now = datetime.utcnow().isoformat() + "Z"
+    tenant = {
+        "id": tenant_id,
+        "name": name,
+        "module": module,
+        "created_at": now,
+        "updated_at": now,
+        "settings": data.get("settings", {}),
+    }
+    tenants[tenant_id] = tenant
+    _persist_tenants()
+    return {"success": True, "tenant": tenant}
+
+
+@app.get("/api/tenant/{tenant_id}")
+def get_tenant(tenant_id: str):
+    tenant = tenants.get(tenant_id)
+    if not tenant:
+        return JSONResponse({"error": "Tenant not found"}, status_code=404)
+    return tenant
+
+
+@app.post("/api/tenant/{tenant_id}")
+async def update_tenant(tenant_id: str, data: dict):
+    tenant = tenants.get(tenant_id)
+    if not tenant:
+        return JSONResponse({"error": "Tenant not found"}, status_code=404)
+    tenant.update(data)
+    tenant["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    tenants[tenant_id] = tenant
+    _persist_tenants()
+    return {"success": True, "tenant": tenant}
+
+
 @app.get("/api/cameras")
 def get_cameras(request: Request):
     """Get all camera configurations."""
@@ -374,6 +595,7 @@ async def update_camera(camera_id: str, config: dict):
     
     camera_configs[camera_id].update(config)
     logging.info(f"Updated camera config: {camera_id} -> {camera_configs[camera_id]}")
+    _persist_cameras()
     return {"success": True, "camera": camera_configs[camera_id]}
 
 
@@ -466,6 +688,7 @@ async def create_camera(data: dict):
     }
     
     camera_configs[camera_id] = camera_config
+    _persist_cameras()
     
     logging.info(f"🎥 Created new camera: {camera_id} -> zone={zone}, video={os.path.basename(abs_path)}")
     
@@ -495,6 +718,7 @@ async def delete_camera(camera_id: str):
     
     config = camera_configs.pop(camera_id)
     logging.info(f"🗑️ Deleted camera: {camera_id}")
+    _persist_cameras()
     
     # Clean up video capture if exists
     if camera_id in video_captures:
@@ -522,31 +746,49 @@ async def camera_health(camera_id: str):
     if camera_id in video_captures:
         cap = video_captures[camera_id]
         if cap is not None and cap.isOpened():
-            return {
+            payload = {
                 "status": "online",
                 "camera_id": camera_id,
                 "zone": config.get("zone"),
                 "active": config.get("active", True),
             }
+            if redis_client:
+                try:
+                    redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
+                except Exception as exc:
+                    logging.warning(f"Redis health update failed: {exc}")
+            return payload
     
     # Try to check if video source is accessible
     video_path = config.get("source") or config.get("video_path")
     if video_path and os.path.exists(video_path):
-        return {
+        payload = {
             "status": "online",
             "camera_id": camera_id,
             "zone": config.get("zone"),
             "active": config.get("active", True),
             "source": "file",
         }
+        if redis_client:
+            try:
+                redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
+            except Exception as exc:
+                logging.warning(f"Redis health update failed: {exc}")
+        return payload
     
-    return {
+    payload = {
         "status": "offline",
         "camera_id": camera_id,
         "zone": config.get("zone"),
         "active": config.get("active", True),
         "reason": "No video source found",
     }
+    if redis_client:
+        try:
+            redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
+        except Exception as exc:
+            logging.warning(f"Redis health update failed: {exc}")
+    return payload
 
 
 @app.get("/api/system/health")
@@ -774,6 +1016,12 @@ async def receive_event(event: dict, request: Request = None):
         f"event_id={event_id} camera={camera_id} zone={zone} detected_by_zone={detected_by_zone} "
         f"event_type={event_type} confidence={confidence:.2f} boxes={boxes_count} ts={timestamp}"
     )
+
+    if redis_client:
+        try:
+            redis_client.publish("events", json.dumps(event))
+        except Exception as exc:
+            logging.warning(f"Redis publish failed: {exc}")
     
     result = process_event(event)
     suspicion_score = float(result.get("suspicion_score", 0.0) or 0.0)
@@ -786,6 +1034,14 @@ async def receive_event(event: dict, request: Request = None):
         incident_id = event.get("event_id")
         incidents[incident_id] = {"event": event, "alert": alert}
         alerts_history.append({"event": event, "alert": alert})
+
+        if JSON_STORE_ENABLED:
+            append_incident({
+                "incident_id": incident_id,
+                "event": event,
+                "alert": alert,
+                "created_at": time.time(),
+            })
 
         logging.warning(
             "[EVENT_INCIDENT_DETECTED] "
@@ -801,6 +1057,12 @@ async def receive_event(event: dict, request: Request = None):
             f"[BROADCAST_QUEUED] event_id={event_id} type={event_type} "
             f"queue_size={alert_broadcast_queue.qsize()}"
         )
+
+        if redis_client:
+            try:
+                redis_client.publish("alerts", json.dumps({"event": event, "alert": alert}))
+            except Exception as exc:
+                logging.warning(f"Redis publish failed: {exc}")
         return {"received": True, "alert": alert, "incident_id": incident_id}
 
     logging.debug(
@@ -948,6 +1210,15 @@ def list_incidents():
         "by_type": by_type,
         "by_zone": by_zone,
     }
+
+
+@app.delete("/incidents")
+def clear_incidents():
+    incidents.clear()
+    alerts_history.clear()
+    if JSON_STORE_ENABLED:
+        save_incidents([])
+    return {"success": True, "cleared": True}
 
 
 @app.get("/incident/{incident_id}/summary")

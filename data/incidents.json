@@ -1,0 +1,2418 @@
+[
+  {
+    "incident_id": "evt_vehicle_detected_1771441628007",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441628007",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.9379636645317078,
+      "timestamp": 1771441628.0075612,
+      "bounding_boxes": [
+        [
+          365,
+          164,
+          509,
+          290
+        ],
+        [
+          574,
+          218,
+          822,
+          529
+        ],
+        [
+          959,
+          141,
+          1083,
+          269
+        ]
+      ],
+      "severity_score": 0.9379636645317078,
+      "metadata": {
+        "vehicle_count": 3,
+        "vehicle_ids": [
+          1,
+          3,
+          4
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.94).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.9379636645317078,
+      "timeline": {
+        "first_seen": 1771441628.0075612,
+        "last_seen": 1771441628.0075612,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441628007",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.9379636645317078,
+        "timestamp": 1771441628.0075612,
+        "bounding_boxes": [
+          [
+            365,
+            164,
+            509,
+            290
+          ],
+          [
+            574,
+            218,
+            822,
+            529
+          ],
+          [
+            959,
+            141,
+            1083,
+            269
+          ]
+        ],
+        "severity_score": 0.9379636645317078,
+        "metadata": {
+          "vehicle_count": 3,
+          "vehicle_ids": [
+            1,
+            3,
+            4
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441628007"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441631.2770174
+  },
+  {
+    "incident_id": "evt_weapon_detected_1771441628305",
+    "event": {
+      "event_id": "evt_weapon_detected_1771441628305",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_fight_school",
+      "zone": "corridor",
+      "event_type": "weapon_detected",
+      "confidence": 0.8495990931987762,
+      "timestamp": 1771441628.305464,
+      "bounding_boxes": [
+        [
+          452,
+          129,
+          735,
+          438
+        ],
+        [
+          463,
+          135,
+          629,
+          416
+        ]
+      ],
+      "severity_score": 0.8495990931987762,
+      "metadata": {
+        "weapon_type": "gun",
+        "near_person": true,
+        "person_distance": 47.7,
+        "person_id": 2,
+        "source": "weapon_model",
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_fight_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Weapon Detected detected (priority: critical, confidence: 0.85).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 0.8495990931987762,
+      "timeline": {
+        "first_seen": 1771441628.305464,
+        "last_seen": 1771441628.305464,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_weapon_detected_1771441628305",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_fight_school",
+        "zone": "corridor",
+        "event_type": "weapon_detected",
+        "confidence": 0.8495990931987762,
+        "timestamp": 1771441628.305464,
+        "bounding_boxes": [
+          [
+            452,
+            129,
+            735,
+            438
+          ],
+          [
+            463,
+            135,
+            629,
+            416
+          ]
+        ],
+        "severity_score": 0.8495990931987762,
+        "metadata": {
+          "weapon_type": "gun",
+          "near_person": true,
+          "person_distance": 47.7,
+          "person_id": 2,
+          "source": "weapon_model",
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_fight_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_fight_school/evt_weapon_detected_1771441628305"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441631.3818488
+  },
+  {
+    "incident_id": "evt_gate_accident_1771441628007",
+    "event": {
+      "event_id": "evt_gate_accident_1771441628007",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "gate_accident",
+      "confidence": 1.0,
+      "timestamp": 1771441628.0075612,
+      "bounding_boxes": [
+        [
+          134,
+          95,
+          189,
+          241
+        ]
+      ],
+      "severity_score": 1.0,
+      "metadata": {
+        "person_id": 0,
+        "vehicle_id": 1,
+        "impact_type": "person_collapsed",
+        "suspicion_score": 0.9,
+        "skeleton_impact_score": 0.85,
+        "vehicle_visible": false,
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Gate Accident detected (priority: critical, confidence: 1.00).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 1.0,
+      "timeline": {
+        "first_seen": 1771441628.0075612,
+        "last_seen": 1771441628.0075612,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_gate_accident_1771441628007",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "gate_accident",
+        "confidence": 1.0,
+        "timestamp": 1771441628.0075612,
+        "bounding_boxes": [
+          [
+            134,
+            95,
+            189,
+            241
+          ]
+        ],
+        "severity_score": 1.0,
+        "metadata": {
+          "person_id": 0,
+          "vehicle_id": 1,
+          "impact_type": "person_collapsed",
+          "suspicion_score": 0.9,
+          "skeleton_impact_score": 0.85,
+          "vehicle_visible": false,
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Triggered ambulance / emergency workflow.",
+        "Notified security and admin with camera + location."
+      ],
+      "evidence": {},
+      "notifications": {
+        "security_admin": {
+          "priority": "critical",
+          "include_location": true,
+          "camera_id": "cam_school_accident_school"
+        }
+      },
+      "automations": {
+        "emergency_workflow": {
+          "type": "ambulance",
+          "status": "requested"
+        }
+      }
+    },
+    "created_at": 1771441633.3441253
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441634043",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441634043",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.944436639547348,
+      "timestamp": 1771441634.0438666,
+      "bounding_boxes": [
+        [
+          365,
+          164,
+          509,
+          292
+        ],
+        [
+          574,
+          218,
+          822,
+          530
+        ],
+        [
+          959,
+          141,
+          1083,
+          269
+        ]
+      ],
+      "severity_score": 0.944436639547348,
+      "metadata": {
+        "vehicle_count": 3,
+        "vehicle_ids": [
+          1,
+          3,
+          4
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.94).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.944436639547348,
+      "timeline": {
+        "first_seen": 1771441634.0438666,
+        "last_seen": 1771441634.0438666,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441634043",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.944436639547348,
+        "timestamp": 1771441634.0438666,
+        "bounding_boxes": [
+          [
+            365,
+            164,
+            509,
+            292
+          ],
+          [
+            574,
+            218,
+            822,
+            530
+          ],
+          [
+            959,
+            141,
+            1083,
+            269
+          ]
+        ],
+        "severity_score": 0.944436639547348,
+        "metadata": {
+          "vehicle_count": 3,
+          "vehicle_ids": [
+            1,
+            3,
+            4
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441634043"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441636.581462
+  },
+  {
+    "incident_id": "evt_weapon_detected_1771441638937",
+    "event": {
+      "event_id": "evt_weapon_detected_1771441638937",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_fight_school",
+      "zone": "corridor",
+      "event_type": "weapon_detected",
+      "confidence": 1.0,
+      "timestamp": 1771441638.9379482,
+      "bounding_boxes": [
+        [
+          461,
+          182,
+          727,
+          495
+        ],
+        [
+          569,
+          231,
+          731,
+          523
+        ]
+      ],
+      "severity_score": 1.0,
+      "metadata": {
+        "weapon_type": "gun",
+        "near_person": true,
+        "person_distance": 68.2,
+        "person_id": 5,
+        "source": "weapon_model",
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_fight_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Weapon Detected detected (priority: critical, confidence: 1.00).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 1.0,
+      "timeline": {
+        "first_seen": 1771441638.9379482,
+        "last_seen": 1771441638.9379482,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_weapon_detected_1771441638937",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_fight_school",
+        "zone": "corridor",
+        "event_type": "weapon_detected",
+        "confidence": 1.0,
+        "timestamp": 1771441638.9379482,
+        "bounding_boxes": [
+          [
+            461,
+            182,
+            727,
+            495
+          ],
+          [
+            569,
+            231,
+            731,
+            523
+          ]
+        ],
+        "severity_score": 1.0,
+        "metadata": {
+          "weapon_type": "gun",
+          "near_person": true,
+          "person_distance": 68.2,
+          "person_id": 5,
+          "source": "weapon_model",
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_fight_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_fight_school/evt_weapon_detected_1771441638937"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441641.692362
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441639450",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441639450",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.7919820249080658,
+      "timestamp": 1771441639.4503858,
+      "bounding_boxes": [
+        [
+          336,
+          175,
+          479,
+          283
+        ]
+      ],
+      "severity_score": 0.7919820249080658,
+      "metadata": {
+        "vehicle_count": 1,
+        "vehicle_ids": [
+          1
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.79).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.7919820249080658,
+      "timeline": {
+        "first_seen": 1771441639.4503858,
+        "last_seen": 1771441639.4503858,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441639450",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.7919820249080658,
+        "timestamp": 1771441639.4503858,
+        "bounding_boxes": [
+          [
+            336,
+            175,
+            479,
+            283
+          ]
+        ],
+        "severity_score": 0.7919820249080658,
+        "metadata": {
+          "vehicle_count": 1,
+          "vehicle_ids": [
+            1
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441639450"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441642.060531
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441644968",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441644968",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.9808736443519592,
+      "timestamp": 1771441644.9689765,
+      "bounding_boxes": [
+        [
+          323,
+          172,
+          464,
+          279
+        ],
+        [
+          536,
+          175,
+          755,
+          451
+        ]
+      ],
+      "severity_score": 0.9808736443519592,
+      "metadata": {
+        "vehicle_count": 2,
+        "vehicle_ids": [
+          1,
+          3
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.98).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.9808736443519592,
+      "timeline": {
+        "first_seen": 1771441644.9689765,
+        "last_seen": 1771441644.9689765,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441644968",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.9808736443519592,
+        "timestamp": 1771441644.9689765,
+        "bounding_boxes": [
+          [
+            323,
+            172,
+            464,
+            279
+          ],
+          [
+            536,
+            175,
+            755,
+            451
+          ]
+        ],
+        "severity_score": 0.9808736443519592,
+        "metadata": {
+          "vehicle_count": 2,
+          "vehicle_ids": [
+            1,
+            3
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441644968"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441647.371535
+  },
+  {
+    "incident_id": "evt_gate_accident_1771441644968",
+    "event": {
+      "event_id": "evt_gate_accident_1771441644968",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "gate_accident",
+      "confidence": 0.9109531491994858,
+      "timestamp": 1771441644.9689765,
+      "bounding_boxes": [
+        [
+          348,
+          118,
+          425,
+          267
+        ],
+        [
+          323,
+          172,
+          464,
+          279
+        ]
+      ],
+      "severity_score": 0.9109531491994858,
+      "metadata": {
+        "person_id": 6,
+        "vehicle_id": 1,
+        "iou": 0.38009872694206287,
+        "distance": 33.734255586866,
+        "is_approaching": false,
+        "suspicion_score": 1.0,
+        "skeleton_impact_score": 0.0,
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Gate Accident detected (priority: critical, confidence: 0.91).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 0.9109531491994858,
+      "timeline": {
+        "first_seen": 1771441644.9689765,
+        "last_seen": 1771441644.9689765,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_gate_accident_1771441644968",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "gate_accident",
+        "confidence": 0.9109531491994858,
+        "timestamp": 1771441644.9689765,
+        "bounding_boxes": [
+          [
+            348,
+            118,
+            425,
+            267
+          ],
+          [
+            323,
+            172,
+            464,
+            279
+          ]
+        ],
+        "severity_score": 0.9109531491994858,
+        "metadata": {
+          "person_id": 6,
+          "vehicle_id": 1,
+          "iou": 0.38009872694206287,
+          "distance": 33.734255586866,
+          "is_approaching": false,
+          "suspicion_score": 1.0,
+          "skeleton_impact_score": 0.0,
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Triggered ambulance / emergency workflow.",
+        "Notified security and admin with camera + location."
+      ],
+      "evidence": {},
+      "notifications": {
+        "security_admin": {
+          "priority": "critical",
+          "include_location": true,
+          "camera_id": "cam_school_accident_school"
+        }
+      },
+      "automations": {
+        "emergency_workflow": {
+          "type": "ambulance",
+          "status": "requested"
+        }
+      }
+    },
+    "created_at": 1771441649.413343
+  },
+  {
+    "incident_id": "evt_weapon_detected_1771441649613",
+    "event": {
+      "event_id": "evt_weapon_detected_1771441649613",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_fight_school",
+      "zone": "corridor",
+      "event_type": "weapon_detected",
+      "confidence": 0.9624608159065247,
+      "timestamp": 1771441649.6138864,
+      "bounding_boxes": [
+        [
+          433,
+          171,
+          858,
+          518
+        ],
+        [
+          539,
+          178,
+          699,
+          537
+        ]
+      ],
+      "severity_score": 0.9624608159065247,
+      "metadata": {
+        "weapon_type": "gun",
+        "near_person": true,
+        "person_distance": 29.1,
+        "person_id": 5,
+        "source": "weapon_model",
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_fight_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Weapon Detected detected (priority: critical, confidence: 0.96).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 0.9624608159065247,
+      "timeline": {
+        "first_seen": 1771441649.6138864,
+        "last_seen": 1771441649.6138864,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_weapon_detected_1771441649613",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_fight_school",
+        "zone": "corridor",
+        "event_type": "weapon_detected",
+        "confidence": 0.9624608159065247,
+        "timestamp": 1771441649.6138864,
+        "bounding_boxes": [
+          [
+            433,
+            171,
+            858,
+            518
+          ],
+          [
+            539,
+            178,
+            699,
+            537
+          ]
+        ],
+        "severity_score": 0.9624608159065247,
+        "metadata": {
+          "weapon_type": "gun",
+          "near_person": true,
+          "person_distance": 29.1,
+          "person_id": 5,
+          "source": "weapon_model",
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_fight_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_fight_school/evt_weapon_detected_1771441649613"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441652.6868947
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441650338",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441650338",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.9339715540409088,
+      "timestamp": 1771441650.3381865,
+      "bounding_boxes": [
+        [
+          322,
+          174,
+          462,
+          279
+        ],
+        [
+          533,
+          172,
+          749,
+          438
+        ]
+      ],
+      "severity_score": 0.9339715540409088,
+      "metadata": {
+        "vehicle_count": 2,
+        "vehicle_ids": [
+          1,
+          3
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.93).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.9339715540409088,
+      "timeline": {
+        "first_seen": 1771441650.3381865,
+        "last_seen": 1771441650.3381865,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441650338",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.9339715540409088,
+        "timestamp": 1771441650.3381865,
+        "bounding_boxes": [
+          [
+            322,
+            174,
+            462,
+            279
+          ],
+          [
+            533,
+            172,
+            749,
+            438
+          ]
+        ],
+        "severity_score": 0.9339715540409088,
+        "metadata": {
+          "vehicle_count": 2,
+          "vehicle_ids": [
+            1,
+            3
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441650338"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441653.1012266
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441655896",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441655896",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.9814406633377075,
+      "timestamp": 1771441655.8965971,
+      "bounding_boxes": [
+        [
+          292,
+          172,
+          430,
+          269
+        ],
+        [
+          510,
+          152,
+          716,
+          402
+        ],
+        [
+          711,
+          50,
+          791,
+          101
+        ]
+      ],
+      "severity_score": 0.9814406633377075,
+      "metadata": {
+        "vehicle_count": 3,
+        "vehicle_ids": [
+          1,
+          3,
+          8
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.98).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.9814406633377075,
+      "timeline": {
+        "first_seen": 1771441655.8965971,
+        "last_seen": 1771441655.8965971,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441655896",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.9814406633377075,
+        "timestamp": 1771441655.8965971,
+        "bounding_boxes": [
+          [
+            292,
+            172,
+            430,
+            269
+          ],
+          [
+            510,
+            152,
+            716,
+            402
+          ],
+          [
+            711,
+            50,
+            791,
+            101
+          ]
+        ],
+        "severity_score": 0.9814406633377075,
+        "metadata": {
+          "vehicle_count": 3,
+          "vehicle_ids": [
+            1,
+            3,
+            8
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441655896"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441658.493467
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441660646",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441660646",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.8949266374111176,
+      "timestamp": 1771441660.646571,
+      "bounding_boxes": [
+        [
+          285,
+          178,
+          417,
+          268
+        ],
+        [
+          502,
+          147,
+          705,
+          392
+        ],
+        [
+          683,
+          50,
+          773,
+          102
+        ]
+      ],
+      "severity_score": 0.8949266374111176,
+      "metadata": {
+        "vehicle_count": 3,
+        "vehicle_ids": [
+          1,
+          3,
+          8
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.89).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.8949266374111176,
+      "timeline": {
+        "first_seen": 1771441660.646571,
+        "last_seen": 1771441660.646571,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441660646",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.8949266374111176,
+        "timestamp": 1771441660.646571,
+        "bounding_boxes": [
+          [
+            285,
+            178,
+            417,
+            268
+          ],
+          [
+            502,
+            147,
+            705,
+            392
+          ],
+          [
+            683,
+            50,
+            773,
+            102
+          ]
+        ],
+        "severity_score": 0.8949266374111176,
+        "metadata": {
+          "vehicle_count": 3,
+          "vehicle_ids": [
+            1,
+            3,
+            8
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441660646"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441663.6336792
+  },
+  {
+    "incident_id": "evt_gate_accident_1771441663659",
+    "event": {
+      "event_id": "evt_gate_accident_1771441663659",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "gate_accident",
+      "confidence": 0.9049610048532486,
+      "timestamp": 1771441663.6599913,
+      "bounding_boxes": [
+        [
+          304,
+          109,
+          371,
+          220
+        ],
+        [
+          279,
+          176,
+          411,
+          266
+        ]
+      ],
+      "severity_score": 0.9049610048532486,
+      "metadata": {
+        "person_id": 6,
+        "vehicle_id": 1,
+        "iou": 0.1800965239171605,
+        "distance": 57.55866572463264,
+        "is_approaching": true,
+        "suspicion_score": 1.0,
+        "skeleton_impact_score": 0.0,
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Gate Accident detected (priority: critical, confidence: 0.90).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 0.9049610048532486,
+      "timeline": {
+        "first_seen": 1771441663.6599913,
+        "last_seen": 1771441663.6599913,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_gate_accident_1771441663659",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "gate_accident",
+        "confidence": 0.9049610048532486,
+        "timestamp": 1771441663.6599913,
+        "bounding_boxes": [
+          [
+            304,
+            109,
+            371,
+            220
+          ],
+          [
+            279,
+            176,
+            411,
+            266
+          ]
+        ],
+        "severity_score": 0.9049610048532486,
+        "metadata": {
+          "person_id": 6,
+          "vehicle_id": 1,
+          "iou": 0.1800965239171605,
+          "distance": 57.55866572463264,
+          "is_approaching": true,
+          "suspicion_score": 1.0,
+          "skeleton_impact_score": 0.0,
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Triggered ambulance / emergency workflow.",
+        "Notified security and admin with camera + location."
+      ],
+      "evidence": {},
+      "notifications": {
+        "security_admin": {
+          "priority": "critical",
+          "include_location": true,
+          "camera_id": "cam_school_accident_school"
+        }
+      },
+      "automations": {
+        "emergency_workflow": {
+          "type": "ambulance",
+          "status": "requested"
+        }
+      }
+    },
+    "created_at": 1771441666.3355553
+  },
+  {
+    "incident_id": "evt_crowd_formation_1771441663328",
+    "event": {
+      "event_id": "evt_crowd_formation_1771441663328",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_fight_school",
+      "zone": "corridor",
+      "event_type": "crowd_formation",
+      "confidence": 1.0,
+      "timestamp": 1771441663.328054,
+      "bounding_boxes": [
+        [
+          245,
+          212,
+          437,
+          600
+        ],
+        [
+          425,
+          159,
+          530,
+          295
+        ],
+        [
+          545,
+          190,
+          728,
+          538
+        ],
+        [
+          424,
+          228,
+          562,
+          591
+        ],
+        [
+          690,
+          178,
+          853,
+          508
+        ]
+      ],
+      "severity_score": 1.0,
+      "metadata": {
+        "person_count": 5,
+        "cluster_spread": 149.8,
+        "duration": 3.22,
+        "zone": "corridor",
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_fight_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Crowd Formation detected (priority: medium, confidence: 1.00).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "medium",
+      "suspicion_score": 1.0,
+      "timeline": {
+        "first_seen": 1771441663.328054,
+        "last_seen": 1771441663.328054,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_crowd_formation_1771441663328",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_fight_school",
+        "zone": "corridor",
+        "event_type": "crowd_formation",
+        "confidence": 1.0,
+        "timestamp": 1771441663.328054,
+        "bounding_boxes": [
+          [
+            245,
+            212,
+            437,
+            600
+          ],
+          [
+            425,
+            159,
+            530,
+            295
+          ],
+          [
+            545,
+            190,
+            728,
+            538
+          ],
+          [
+            424,
+            228,
+            562,
+            591
+          ],
+          [
+            690,
+            178,
+            853,
+            508
+          ]
+        ],
+        "severity_score": 1.0,
+        "metadata": {
+          "person_count": 5,
+          "cluster_spread": 149.8,
+          "duration": 3.22,
+          "zone": "corridor",
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_fight_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_fight_school/evt_crowd_formation_1771441663328"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441668.2981615
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441666352",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441666352",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.8564135134220123,
+      "timestamp": 1771441666.3527431,
+      "bounding_boxes": [
+        [
+          269,
+          172,
+          399,
+          263
+        ],
+        [
+          489,
+          135,
+          688,
+          370
+        ],
+        [
+          665,
+          50,
+          745,
+          102
+        ],
+        [
+          958,
+          138,
+          1082,
+          271
+        ]
+      ],
+      "severity_score": 0.8564135134220123,
+      "metadata": {
+        "vehicle_count": 4,
+        "vehicle_ids": [
+          1,
+          3,
+          8,
+          9
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.86).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.8564135134220123,
+      "timeline": {
+        "first_seen": 1771441666.3527431,
+        "last_seen": 1771441666.3527431,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441666352",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.8564135134220123,
+        "timestamp": 1771441666.3527431,
+        "bounding_boxes": [
+          [
+            269,
+            172,
+            399,
+            263
+          ],
+          [
+            489,
+            135,
+            688,
+            370
+          ],
+          [
+            665,
+            50,
+            745,
+            102
+          ],
+          [
+            958,
+            138,
+            1082,
+            271
+          ]
+        ],
+        "severity_score": 0.8564135134220123,
+        "metadata": {
+          "vehicle_count": 4,
+          "vehicle_ids": [
+            1,
+            3,
+            8,
+            9
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441666352"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441668.83829
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441671390",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441671390",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.8548055291175842,
+      "timestamp": 1771441671.3909326,
+      "bounding_boxes": [
+        [
+          254,
+          163,
+          382,
+          261
+        ],
+        [
+          479,
+          125,
+          672,
+          357
+        ]
+      ],
+      "severity_score": 0.8548055291175842,
+      "metadata": {
+        "vehicle_count": 2,
+        "vehicle_ids": [
+          1,
+          3
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.85).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.8548055291175842,
+      "timeline": {
+        "first_seen": 1771441671.3909326,
+        "last_seen": 1771441671.3909326,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441671390",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.8548055291175842,
+        "timestamp": 1771441671.3909326,
+        "bounding_boxes": [
+          [
+            254,
+            163,
+            382,
+            261
+          ],
+          [
+            479,
+            125,
+            672,
+            357
+          ]
+        ],
+        "severity_score": 0.8548055291175842,
+        "metadata": {
+          "vehicle_count": 2,
+          "vehicle_ids": [
+            1,
+            3
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441671390"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441674.2048898
+  },
+  {
+    "incident_id": "evt_weapon_detected_1771441671751",
+    "event": {
+      "event_id": "evt_weapon_detected_1771441671751",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_fight_school",
+      "zone": "corridor",
+      "event_type": "weapon_detected",
+      "confidence": 0.9161490797996521,
+      "timestamp": 1771441671.7516153,
+      "bounding_boxes": [
+        [
+          351,
+          158,
+          672,
+          528
+        ],
+        [
+          433,
+          235,
+          539,
+          599
+        ]
+      ],
+      "severity_score": 0.9161490797996521,
+      "metadata": {
+        "weapon_type": "gun",
+        "near_person": true,
+        "person_distance": 78.1,
+        "person_id": 9,
+        "source": "weapon_model",
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_fight_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Weapon Detected detected (priority: critical, confidence: 0.92).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 0.9161490797996521,
+      "timeline": {
+        "first_seen": 1771441671.7516153,
+        "last_seen": 1771441671.7516153,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_weapon_detected_1771441671751",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_fight_school",
+        "zone": "corridor",
+        "event_type": "weapon_detected",
+        "confidence": 0.9161490797996521,
+        "timestamp": 1771441671.7516153,
+        "bounding_boxes": [
+          [
+            351,
+            158,
+            672,
+            528
+          ],
+          [
+            433,
+            235,
+            539,
+            599
+          ]
+        ],
+        "severity_score": 0.9161490797996521,
+        "metadata": {
+          "weapon_type": "gun",
+          "near_person": true,
+          "person_distance": 78.1,
+          "person_id": 9,
+          "source": "weapon_model",
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_fight_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_fight_school/evt_weapon_detected_1771441671751"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441674.5096965
+  },
+  {
+    "incident_id": "evt_gate_accident_1771441674223",
+    "event": {
+      "event_id": "evt_gate_accident_1771441674223",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "gate_accident",
+      "confidence": 1.0,
+      "timestamp": 1771441674.2236307,
+      "bounding_boxes": [
+        [
+          161,
+          107,
+          208,
+          251
+        ],
+        [
+          250,
+          158,
+          376,
+          259
+        ]
+      ],
+      "severity_score": 1.0,
+      "metadata": {
+        "person_id": 0,
+        "vehicle_id": 1,
+        "impact_type": "person_collapsed",
+        "suspicion_score": 1.0,
+        "skeleton_impact_score": 0.85,
+        "vehicle_visible": true,
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Gate Accident detected (priority: critical, confidence: 1.00).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 1.0,
+      "timeline": {
+        "first_seen": 1771441674.2236307,
+        "last_seen": 1771441674.2236307,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_gate_accident_1771441674223",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "gate_accident",
+        "confidence": 1.0,
+        "timestamp": 1771441674.2236307,
+        "bounding_boxes": [
+          [
+            161,
+            107,
+            208,
+            251
+          ],
+          [
+            250,
+            158,
+            376,
+            259
+          ]
+        ],
+        "severity_score": 1.0,
+        "metadata": {
+          "person_id": 0,
+          "vehicle_id": 1,
+          "impact_type": "person_collapsed",
+          "suspicion_score": 1.0,
+          "skeleton_impact_score": 0.85,
+          "vehicle_visible": true,
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Triggered ambulance / emergency workflow.",
+        "Notified security and admin with camera + location."
+      ],
+      "evidence": {},
+      "notifications": {
+        "security_admin": {
+          "priority": "critical",
+          "include_location": true,
+          "camera_id": "cam_school_accident_school"
+        }
+      },
+      "automations": {
+        "emergency_workflow": {
+          "type": "ambulance",
+          "status": "requested"
+        }
+      }
+    },
+    "created_at": 1771441676.9811497
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441677013",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441677013",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.7785053551197052,
+      "timestamp": 1771441677.0132442,
+      "bounding_boxes": [
+        [
+          605,
+          43,
+          696,
+          102
+        ]
+      ],
+      "severity_score": 0.7785053551197052,
+      "metadata": {
+        "vehicle_count": 1,
+        "vehicle_ids": [
+          8
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.78).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.7785053551197052,
+      "timeline": {
+        "first_seen": 1771441677.0132442,
+        "last_seen": 1771441677.0132442,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441677013",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.7785053551197052,
+        "timestamp": 1771441677.0132442,
+        "bounding_boxes": [
+          [
+            605,
+            43,
+            696,
+            102
+          ]
+        ],
+        "severity_score": 0.7785053551197052,
+        "metadata": {
+          "vehicle_count": 1,
+          "vehicle_ids": [
+            8
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441677013"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441679.7340884
+  },
+  {
+    "incident_id": "evt_gate_accident_1771441682597",
+    "event": {
+      "event_id": "evt_gate_accident_1771441682597",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "gate_accident",
+      "confidence": 1.0,
+      "timestamp": 1771441682.5972235,
+      "bounding_boxes": [
+        [
+          157,
+          109,
+          217,
+          253
+        ]
+      ],
+      "severity_score": 1.0,
+      "metadata": {
+        "person_id": 0,
+        "vehicle_id": 3,
+        "impact_type": "person_collapsed",
+        "suspicion_score": 1.0,
+        "skeleton_impact_score": 0.85,
+        "vehicle_visible": false,
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Gate Accident detected (priority: critical, confidence: 1.00).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 1.0,
+      "timeline": {
+        "first_seen": 1771441682.5972235,
+        "last_seen": 1771441682.5972235,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_gate_accident_1771441682597",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "gate_accident",
+        "confidence": 1.0,
+        "timestamp": 1771441682.5972235,
+        "bounding_boxes": [
+          [
+            157,
+            109,
+            217,
+            253
+          ]
+        ],
+        "severity_score": 1.0,
+        "metadata": {
+          "person_id": 0,
+          "vehicle_id": 3,
+          "impact_type": "person_collapsed",
+          "suspicion_score": 1.0,
+          "skeleton_impact_score": 0.85,
+          "vehicle_visible": false,
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Triggered ambulance / emergency workflow.",
+        "Notified security and admin with camera + location."
+      ],
+      "evidence": {},
+      "notifications": {
+        "security_admin": {
+          "priority": "critical",
+          "include_location": true,
+          "camera_id": "cam_school_accident_school"
+        }
+      },
+      "automations": {
+        "emergency_workflow": {
+          "type": "ambulance",
+          "status": "requested"
+        }
+      }
+    },
+    "created_at": 1771441685.137635
+  },
+  {
+    "incident_id": "evt_weapon_detected_1771441683302",
+    "event": {
+      "event_id": "evt_weapon_detected_1771441683302",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_fight_school",
+      "zone": "corridor",
+      "event_type": "weapon_detected",
+      "confidence": 1.0,
+      "timestamp": 1771441683.3020651,
+      "bounding_boxes": [
+        [
+          366,
+          149,
+          753,
+          581
+        ],
+        [
+          440,
+          175,
+          603,
+          575
+        ]
+      ],
+      "severity_score": 1.0,
+      "metadata": {
+        "weapon_type": "gun",
+        "near_person": true,
+        "person_distance": 39.3,
+        "person_id": 9,
+        "source": "weapon_model",
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_fight_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Weapon Detected detected (priority: critical, confidence: 1.00).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 1.0,
+      "timeline": {
+        "first_seen": 1771441683.3020651,
+        "last_seen": 1771441683.3020651,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_weapon_detected_1771441683302",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_fight_school",
+        "zone": "corridor",
+        "event_type": "weapon_detected",
+        "confidence": 1.0,
+        "timestamp": 1771441683.3020651,
+        "bounding_boxes": [
+          [
+            366,
+            149,
+            753,
+            581
+          ],
+          [
+            440,
+            175,
+            603,
+            575
+          ]
+        ],
+        "severity_score": 1.0,
+        "metadata": {
+          "weapon_type": "gun",
+          "near_person": true,
+          "person_distance": 39.3,
+          "person_id": 9,
+          "source": "weapon_model",
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_fight_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_fight_school/evt_weapon_detected_1771441683302"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441685.9143395
+  },
+  {
+    "incident_id": "evt_vehicle_detected_1771441686541",
+    "event": {
+      "event_id": "evt_vehicle_detected_1771441686541",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "vehicle_detected",
+      "confidence": 0.8526009321212769,
+      "timestamp": 1771441686.541298,
+      "bounding_boxes": [
+        [
+          445,
+          102,
+          626,
+          310
+        ]
+      ],
+      "severity_score": 0.8526009321212769,
+      "metadata": {
+        "vehicle_count": 1,
+        "vehicle_ids": [
+          3
+        ],
+        "after_hours": true
+      },
+      "global_person_id": null,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Vehicle Detected detected (priority: low, confidence: 0.85).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "low",
+      "suspicion_score": 0.8526009321212769,
+      "timeline": {
+        "first_seen": 1771441686.541298,
+        "last_seen": 1771441686.541298,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_vehicle_detected_1771441686541",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "vehicle_detected",
+        "confidence": 0.8526009321212769,
+        "timestamp": 1771441686.541298,
+        "bounding_boxes": [
+          [
+            445,
+            102,
+            626,
+            310
+          ]
+        ],
+        "severity_score": 0.8526009321212769,
+        "metadata": {
+          "vehicle_count": 1,
+          "vehicle_ids": [
+            3
+          ],
+          "after_hours": true
+        },
+        "global_person_id": null,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Captured and stored snapshot of incident frame."
+      ],
+      "evidence": {
+        "snapshot_ref": "snapshot://school1/cam_school_accident_school/evt_vehicle_detected_1771441686541"
+      },
+      "notifications": {},
+      "automations": {}
+    },
+    "created_at": 1771441689.3243864
+  },
+  {
+    "incident_id": "evt_gate_accident_1771441690682",
+    "event": {
+      "event_id": "evt_gate_accident_1771441690682",
+      "tenant_id": "school1",
+      "camera_id": "cam_school_accident_school",
+      "zone": "outgate",
+      "event_type": "gate_accident",
+      "confidence": 1.0,
+      "timestamp": 1771441690.6820848,
+      "bounding_boxes": [
+        [
+          160,
+          111,
+          219,
+          277
+        ]
+      ],
+      "severity_score": 1.0,
+      "metadata": {
+        "person_id": 0,
+        "vehicle_id": 3,
+        "impact_type": "person_collapsed",
+        "suspicion_score": 1.0,
+        "skeleton_impact_score": 0.85,
+        "vehicle_visible": false,
+        "after_hours": true
+      },
+      "global_person_id": 1,
+      "after_hours": true,
+      "cross_camera": false,
+      "seen_in_cameras": [
+        "cam_school_accident_school"
+      ]
+    },
+    "alert": {
+      "alert": true,
+      "summary": "Gate Accident detected (priority: critical, confidence: 1.00).",
+      "llm_explanation": "Automatically generated explanation based on recent frames and configured safety playbooks. (LLM endpoint is not configured, so this is a local fallback string.)",
+      "priority": "critical",
+      "suspicion_score": 1.0,
+      "timeline": {
+        "first_seen": 1771441690.6820848,
+        "last_seen": 1771441690.6820848,
+        "frames_considered": 1
+      },
+      "event": {
+        "event_id": "evt_gate_accident_1771441690682",
+        "tenant_id": "school1",
+        "camera_id": "cam_school_accident_school",
+        "zone": "outgate",
+        "event_type": "gate_accident",
+        "confidence": 1.0,
+        "timestamp": 1771441690.6820848,
+        "bounding_boxes": [
+          [
+            160,
+            111,
+            219,
+            277
+          ]
+        ],
+        "severity_score": 1.0,
+        "metadata": {
+          "person_id": 0,
+          "vehicle_id": 3,
+          "impact_type": "person_collapsed",
+          "suspicion_score": 1.0,
+          "skeleton_impact_score": 0.85,
+          "vehicle_visible": false,
+          "after_hours": true
+        },
+        "global_person_id": 1,
+        "after_hours": true,
+        "cross_camera": false,
+        "seen_in_cameras": [
+          "cam_school_accident_school"
+        ]
+      },
+      "actions": [
+        "Triggered ambulance / emergency workflow.",
+        "Notified security and admin with camera + location."
+      ],
+      "evidence": {},
+      "notifications": {
+        "security_admin": {
+          "priority": "critical",
+          "include_location": true,
+          "camera_id": "cam_school_accident_school"
+        }
+      },
+      "automations": {
+        "emergency_workflow": {
+          "type": "ambulance",
+          "status": "requested"
+        }
+      }
+    },
+    "created_at": 1771441693.1629775
+  }
+]
