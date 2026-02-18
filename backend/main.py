@@ -134,7 +134,7 @@ ZONE_TYPES = {
 
 
 def _get_test_videos_dir() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), '../test_videos'))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), 'test_videos'))
 
 
 def _normalize_module(module: Optional[str]) -> str:
@@ -505,6 +505,82 @@ async def delete_camera(camera_id: str):
         del video_captures[camera_id]
     
     return {"success": True, "deleted": camera_id}
+
+
+@app.get("/api/camera/{camera_id}/health")
+async def camera_health(camera_id: str):
+    """
+    Check health status of a camera.
+    Returns online if camera exists and has a working video source.
+    """
+    if camera_id not in camera_configs:
+        return JSONResponse({"status": "offline", "error": "Camera not found"}, status_code=404)
+    
+    config = camera_configs[camera_id]
+    
+    # Check if camera has a video capture
+    if camera_id in video_captures:
+        cap = video_captures[camera_id]
+        if cap is not None and cap.isOpened():
+            return {
+                "status": "online",
+                "camera_id": camera_id,
+                "zone": config.get("zone"),
+                "active": config.get("active", True),
+            }
+    
+    # Try to check if video source is accessible
+    video_path = config.get("source") or config.get("video_path")
+    if video_path and os.path.exists(video_path):
+        return {
+            "status": "online",
+            "camera_id": camera_id,
+            "zone": config.get("zone"),
+            "active": config.get("active", True),
+            "source": "file",
+        }
+    
+    return {
+        "status": "offline",
+        "camera_id": camera_id,
+        "zone": config.get("zone"),
+        "active": config.get("active", True),
+        "reason": "No video source found",
+    }
+
+
+@app.get("/api/system/health")
+async def system_health():
+    """
+    Get overall system health status.
+    """
+    online_cameras = 0
+    total_cameras = len(camera_configs)
+    
+    for cam_id, config in camera_configs.items():
+        if cam_id in video_captures:
+            cap = video_captures[cam_id]
+            if cap is not None and cap.isOpened():
+                online_cameras += 1
+        else:
+            video_path = config.get("source") or config.get("video_path")
+            if video_path and os.path.exists(video_path):
+                online_cameras += 1
+    
+    ws_connected = len(active_alert_clients)
+    
+    return {
+        "status": "healthy" if online_cameras > 0 or total_cameras == 0 else "degraded",
+        "cameras": {
+            "total": total_cameras,
+            "online": online_cameras,
+            "offline": total_cameras - online_cameras,
+        },
+        "websocket_clients": ws_connected,
+        "incidents_count": len(incidents),
+        "alerts_count": len(alerts_history),
+        "module": selected_module,
+    }
 
 
 # ============================================================================

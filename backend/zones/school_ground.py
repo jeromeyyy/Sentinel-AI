@@ -200,6 +200,9 @@ class SchoolGroundProcessor(BaseZoneProcessor):
             self._update_suspicion("fight", False)
             return None
 
+        # Align poses to tracked persons before building history
+        poses = self._align_poses_with_tracks(poses, persons)
+
         for pose in poses:
             pid = pose.get("track_id")
             kps = pose.get("keypoints")
@@ -323,8 +326,9 @@ class SchoolGroundProcessor(BaseZoneProcessor):
             self._update_suspicion("fall_detected", False)
             return None
 
+        poses = self._align_poses_with_tracks(poses, persons)
         pose_map = {p["track_id"]: p["keypoints"] for p in poses
-                    if "track_id" in p and "keypoints" in p}
+                if "track_id" in p and "keypoints" in p}
 
         fall_candidates = []
 

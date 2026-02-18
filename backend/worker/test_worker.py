@@ -33,8 +33,12 @@ import logging
 import requests
 from typing import Optional, List, Dict
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add worker and backend root directories to path for imports
+WORKER_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_ROOT = os.path.abspath(os.path.join(WORKER_DIR, ".."))
+for path in (WORKER_DIR, BACKEND_ROOT):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 # Import both new pipeline and legacy functions
 from worker import (

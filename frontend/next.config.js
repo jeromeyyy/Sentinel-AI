@@ -14,10 +14,7 @@ const nextConfig = {
       },
     ],
   },
-  // Environment variables exposed to the browser
-  env: {
-    NEXT_PUBLIC_API_BASE: process.env.NEXT_PUBLIC_API_BASE,
-  },
+  // NEXT_PUBLIC_* env vars are exposed automatically by Next.js
 }
 
 module.exports = nextConfig

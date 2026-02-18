@@ -1,540 +1,650 @@
-import { useEffect, useState } from 'react';
-import AlertPopup from '../components/AlertPopup';
-import AnalyticsPanel from '../components/AnalyticsPanel';
-import IncidentList from '../components/IncidentList';
-import MultiCameraGrid from '../components/MultiCameraGrid';
+'use client';
 
-// ─── API Configuration ───────────────────────────────────────────────────────
-// For local development, uncomment the line below:
-// const BACKEND_URL = 'http://localhost:8000';
+import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/router';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Maximize2,
+  Minimize2,
+  Camera,
+  AlertTriangle,
+  Activity,
+  Clock,
+  Filter,
+  Search,
+  Download,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 
-// For production (Vercel + Render), use environment variable:
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+import { DashboardLayout } from '../components/layout';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { StatBox } from '../components/ui/StatBox';
+import { StatusIndicator, LiveIndicator } from '../components/ui/StatusIndicator';
+import { Input, Select } from '../components/ui/Input';
+import { SkeletonCameraGrid, SkeletonTable } from '../components/ui/Skeleton';
+import { NoIncidents, NoAlerts, NoCameras, NoSearchResults } from '../components/ui/EmptyState';
 
-// WebSocket URL (derived from API base)
-const getWsUrl = () => {
-  const base = BACKEND_URL;
-  // For local development, uncomment: return 'ws://localhost:8000/ws/alerts';
-  if (base.startsWith('https://')) {
-    return base.replace('https://', 'wss://') + '/ws/alerts';
-  }
-  return base.replace('http://', 'ws://') + '/ws/alerts';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { BACKEND_URL, ZONES, PRIORITY_COLORS, EVENT_LABELS } from '../lib/constants';
+import { cn, formatTimestamp, formatRelativeTime, formatEventType, getAlertKey, getCameraId, getEventType } from '../lib/utils';
+
+// Import chart components
+import AnalyticsCharts from '../components/AnalyticsCharts';
+import AlertPopupNew from '../components/AlertPopupNew';
+import IncidentTimeline from '../components/IncidentTimeline';
+
+const TAB_TITLES = {
+  monitoring: { title: 'Live Monitoring', subtitle: 'Real-time surveillance and threat detection' },
+  cameras: { title: 'Camera Management', subtitle: 'Configure and monitor camera feeds' },
+  incidents: { title: 'Incident History', subtitle: 'View and filter past security events' },
+  analytics: { title: 'Analytics Dashboard', subtitle: 'Insights and trends analysis' },
+  settings: { title: 'System Settings', subtitle: 'Configure system preferences' },
 };
 
-export default function Monitor() {
-  const [activeAlertsByCamera, setActiveAlertsByCamera] = useState({});
-  const [analytics, setAnalytics] = useState(null);
-  const [incidentList, setIncidentList] = useState([]);
-  const [stats, setStats] = useState({});
+export default function MonitorPage() {
+  const router = useRouter();
+  const { tab } = router.query;
+  
   const [activeTab, setActiveTab] = useState('monitoring');
-  const [wsStatus, setWsStatus] = useState('connecting');
-  const [alertCount, setAlertCount] = useState(0);
+  const [cameras, setCameras] = useState([]);
+  const [stats, setStats] = useState({ active_cameras: 0, total_incidents: 0 });
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedCamera, setExpandedCamera] = useState(null);
+  const [highlightedCamera, setHighlightedCamera] = useState(null);
 
-  const getAlertKey = (alertObj) => {
-    const event = alertObj?.event || alertObj || {};
-    return event.event_id || `${event.camera_id || 'cam'}_${event.event_type || 'event'}_${event.timestamp || Date.now()}`;
-  };
+  // WebSocket hook for real-time alerts
+  const { 
+    status: wsStatus, 
+    alerts, 
+    incidents, 
+    alertCount,
+    dismissAlert, 
+    markResolved,
+    setIncidents,
+  } = useWebSocket();
 
-  const getCameraId = (alertObj) => {
-    const event = alertObj?.event || alertObj || {};
-    return event.camera_id || alertObj?.camera_id || 'unknown_camera';
-  };
-
-  const getEventType = (alertObj) => {
-    const event = alertObj?.event || alertObj || {};
-    return event.event_type || alertObj?.event_type || 'unknown_event';
-  };
-
-  const dismissAlert = (cameraId) => {
-    setActiveAlertsByCamera((prev) => {
-      const next = { ...prev };
-      delete next[cameraId];
-      return next;
-    });
-  };
-
-  // WebSocket subscription - PRIMARY real-time source for incidents
-  // Connects once, handles reconnection, appends new incidents to timeline
+  // Update active tab from URL
   useEffect(() => {
-    let ws;
-    let reconnectTimeout;
+    if (tab && TAB_TITLES[tab]) {
+      setActiveTab(tab);
+    }
+  }, [tab]);
 
-    const connect = () => {
-      const wsUrl = getWsUrl();
-      console.log('[WS_CONNECT_ATTEMPT] url=' + wsUrl);
-      ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        console.log('[WS_CONNECTED] ready for alerts');
-        setWsStatus('connected');
-      };
+  // Handle tab change
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    router.push(`/monitor?tab=${newTab}`, undefined, { shallow: true });
+  };
 
-      ws.onmessage = (event) => {
-        try {
-          // STEP 2: RAW PAYLOAD LOGGING before parsing
-          console.log('[WS_RAW_MESSAGE]', event.data?.substring?.(0, 200));
-          
-          const data = JSON.parse(event.data);
-          
-          // STEP 3: FULL SCHEMA INSPECTION
-          console.log('[WS_PAYLOAD_STRUCTURE]', {
-            has_id: !!data.id,
-            has_alert: !!data.alert,
-            has_event: !!data.event,
-            keys: Object.keys(data),
-            event_type: data.event?.event_type || 'unknown',
-            event_id: data.event?.event_id || data.id || data.msg,
-            camera_id: data.event?.camera_id,
-            timestamp: data.event?.timestamp,
-            timestamp_ms: data.event?.timestamp && data.event.timestamp < 1e12 ? data.event.timestamp * 1000 : data.event?.timestamp,
-          });
-          
-          console.log('[WS_MESSAGE_RX]', {
-            has_alert: !!data.alert,
-            has_event: !!data.event,
-            has_id: !!data.id,
-            event_type: data.event?.event_type || data.alert?.event?.event_type || 'unknown',
-            event_id: data.event?.event_id || data.alert?.event?.event_id || data.id || data.msg,
-            camera_id: data.event?.camera_id || data.alert?.event?.camera_id,
-          });
-
-          if (data.alert || data.event) {
-            // STEP 4: SCHEMA VALIDATION - ensure expected fields exist
-            const nextAlert = data.alert || data;
-            const eventObj = data.event || {};
-            const incident_id = data.id || data.event?.event_id || 'unknown';
-            
-            const cameraId = getCameraId(nextAlert);
-            const nextEventType = getEventType(nextAlert);
-            const nextEventId = getAlertKey(nextAlert);
-            
-            console.log('[WS_EXTRACTED_FIELDS]', {
-              incident_id,
-              cameraId,
-              nextEventType,
-              nextEventId,
-              has_timestamp: !!eventObj.timestamp,
-              timestamp_value: eventObj.timestamp,
-            });
-
-            console.log('[ALERT_PROCESS]', {
-              camera_id: cameraId,
-              event_type: nextEventType,
-              event_id: nextEventId,
-            });
-
-            setActiveAlertsByCamera((prev) => {
-              const current = prev[cameraId];
-              if (current) {
-                const currentEventType = getEventType(current);
-                const currentEventId = getAlertKey(current);
-
-                // Ignore duplicates: same camera + same event type (or exact same event id)
-                if (currentEventType === nextEventType || currentEventId === nextEventId) {
-                  console.log('[ALERT_DUPLICATE_SUPPRESSED]', {
-                    reason: currentEventType === nextEventType ? 'same_type' : 'same_id',
-                    camera_id: cameraId,
-                    event_type: nextEventType,
-                  });
-                  return prev;
-                }
-              }
-
-              // Replace alert for this camera only when event changes
-              console.log('[ALERT_DISPLAYED]', {
-                camera_id: cameraId,
-                event_type: nextEventType,
-                priority: nextAlert.priority || 'medium',
-              });
-              return {
-                ...prev,
-                [cameraId]: nextAlert,
-              };
-            });
-            
-            // STEP 7: MERGE INTO INCIDENTS TIMELINE (REAL-TIME UPDATE)
-            // Build incident object matching backend /incidents API format
-            const incident_obj = {
-              id: incident_id,
-              event: eventObj,
-              alert: nextAlert
-            };
-            
-            console.log('[INCIDENT_MERGE]', {
-              incident_id,
-              event_type: nextEventType,
-              will_add_to_timeline: true,
-            });
-            
-            // Add to incidents list at the top (most recent first)
-            setIncidentList((prev) => {
-              // Use event_id as primary deduplication key
-              const eventId = eventObj.event_id || incident_id;
-              
-              // Check if this incident already exists (by event_id or id)
-              const exists = prev.some(inc => 
-                inc.event?.event_id === eventId || 
-                inc.id === incident_id
-              );
-              
-              if (exists) {
-                console.log('[INCIDENT_DUPLICATE_PREVENTED]', {
-                  event_id: eventId,
-                  incident_id,
-                  reason: 'already_in_timeline'
-                });
-                return prev;
-              }
-              
-              console.log('[INCIDENT_REALTIME_ADDED]', {
-                event_id: eventId,
-                incident_id,
-                event_type: nextEventType,
-                total_incidents: prev.length + 1
-              });
-              
-              // Add new incident to the beginning of array (most recent first)
-              const updated = [incident_obj, ...prev];
-              
-              // Keep only last 1000 incidents to prevent memory issues
-              if (updated.length > 1000) {
-                return updated.slice(0, 1000);
-              }
-              
-              return updated;
-            });
-            
-            setAlertCount((c) => c + 1);
-          }
-        } catch (e) {
-          console.error('[WS_PARSE_ERROR]', {
-            error: e.message,
-            raw_data: event.data?.substring?.(0, 100),
-          });
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('[WS_ERROR]', {
-          error: error?.message || 'unknown',
-          readyState: ws?.readyState,
-        });
-        setWsStatus('error');
-      };
-
-      ws.onclose = () => {
-        console.log('[WS_CLOSED] reconnecting in 3s');
-        setWsStatus('disconnected');
-        reconnectTimeout = setTimeout(connect, 3000);
-      };
-    };
-
-    connect();
-    return () => {
-      ws?.close();
-      clearTimeout(reconnectTimeout);
-    };
-  }, []);
-
-  // Initial data load (incidents only loaded once)
+  // Load initial data
   useEffect(() => {
-    async function initialLoad() {
+    async function loadData() {
+      setLoading(true);
       try {
-        console.log('[INITIAL_LOAD] Fetching incidents and stats');
-        const [incidentsRes, statsRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/incidents`),
+        const [camerasRes, statsRes, incidentsRes] = await Promise.all([
+          fetch(`${BACKEND_URL}/api/cameras`),
           fetch(`${BACKEND_URL}/api/stats`),
+          fetch(`${BACKEND_URL}/incidents`),
         ]);
-        
+
+        if (camerasRes.ok) {
+          const data = await camerasRes.json();
+          setCameras(data.cameras || []);
+        }
+
+        if (statsRes.ok) {
+          const data = await statsRes.json();
+          setStats(data);
+        }
+
         if (incidentsRes.ok) {
           const data = await incidentsRes.json();
-          setAnalytics({ totals: data.totals, by_type: data.by_type, by_zone: data.by_zone });
+          setAnalytics({ 
+            totals: data.totals, 
+            by_type: data.by_type, 
+            by_zone: data.by_zone 
+          });
           
-          // INITIAL LOAD ONLY - set initial incidents from API
-          let apiIncidents = data.incidents || [];
-          
-          // Sort by timestamp descending (most recent first)
-          apiIncidents = apiIncidents.sort((a, b) => {
+          // Set initial incidents sorted by timestamp
+          const sortedIncidents = (data.incidents || []).sort((a, b) => {
             const aTs = a.event?.timestamp || 0;
             const bTs = b.event?.timestamp || 0;
             return bTs - aTs;
           });
-          
-          console.log('[INITIAL_INCIDENTS_LOADED]', {
-            count: apiIncidents.length,
-            source: 'API initial load (sorted by timestamp)'
-          });
-          setIncidentList(apiIncidents);
-        }
-        
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
+          setIncidents(sortedIncidents);
         }
       } catch (e) {
-        console.error('[INITIAL_LOAD_ERROR]', e);
+        console.error('Failed to load data:', e);
+      } finally {
+        setLoading(false);
       }
     }
-    
-    initialLoad();
-  }, []);
-  
-  // Periodic stats updates only (no incidents polling)
+
+    loadData();
+  }, [setIncidents]);
+
+  // Periodic stats refresh
   useEffect(() => {
-    async function updateStats() {
+    const interval = setInterval(async () => {
       try {
-        const statsRes = await fetch(`${BACKEND_URL}/api/stats`);
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
-          console.log('[STATS_UPDATED]', 'periodic update');
+        const res = await fetch(`${BACKEND_URL}/api/stats`);
+        if (res.ok) {
+          const data = await res.json();
+          setStats(data);
         }
-      } catch (e) {
-        console.error('[STATS_UPDATE_ERROR]', e);
-      }
-    }
-    
-    // Update stats every 10 seconds (less aggressive)
-    const statsInterval = setInterval(updateStats, 10000);
-    return () => clearInterval(statsInterval);
+      } catch {}
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const sidebarItems = [
-    { id: 'monitoring', icon: '📹', label: 'Live Monitoring' },
-    { id: 'incidents', icon: '⚠️', label: 'Incidents' },
-    { id: 'analytics', icon: '📊', label: 'Analytics' },
-    { id: 'settings', icon: '⚙️', label: 'Settings' },
-  ];
+  // Highlight camera when alert received
+  useEffect(() => {
+    Object.keys(alerts).forEach(cameraId => {
+      setHighlightedCamera(cameraId);
+      setTimeout(() => setHighlightedCamera(null), 3000);
+    });
+  }, [alerts]);
+
+  const tabConfig = TAB_TITLES[activeTab] || TAB_TITLES.monitoring;
+  const activeAlertCount = Object.keys(alerts).length;
+  const criticalCount = Object.values(alerts).filter(a => a?.priority === 'critical').length;
 
   return (
-    <div className="min-h-screen bg-[#0f1419] flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#1a1f2e] border-r border-[#2f3542] flex flex-col">
-        {/* Logo */}
-        <div className="p-4 border-b border-[#2f3542]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </div>
-            <div>
-              <div className="text-white font-semibold">SentinelAI</div>
-              <div className="text-xs text-gray-400">School Safety</div>
-            </div>
-          </div>
+    <DashboardLayout
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+      title={tabConfig.title}
+      subtitle={tabConfig.subtitle}
+      stats={{
+        activeCameras: stats.active_cameras || cameras.length,
+        totalIncidents: stats.total_incidents || incidents.length,
+        criticalAlerts: criticalCount,
+      }}
+      alertCount={activeAlertCount}
+      wsStatus={wsStatus}
+    >
+      <AnimatePresence mode="wait">
+        {activeTab === 'monitoring' && (
+          <MonitoringView
+            key="monitoring"
+            cameras={cameras}
+            alerts={alerts}
+            incidents={incidents}
+            analytics={analytics}
+            loading={loading}
+            wsStatus={wsStatus}
+            expandedCamera={expandedCamera}
+            setExpandedCamera={setExpandedCamera}
+            highlightedCamera={highlightedCamera}
+            dismissAlert={dismissAlert}
+          />
+        )}
+
+        {activeTab === 'cameras' && (
+          <CamerasView
+            key="cameras"
+            cameras={cameras}
+            loading={loading}
+            expandedCamera={expandedCamera}
+            setExpandedCamera={setExpandedCamera}
+          />
+        )}
+
+        {activeTab === 'incidents' && (
+          <IncidentsView
+            key="incidents"
+            incidents={incidents}
+            loading={loading}
+            markResolved={markResolved}
+          />
+        )}
+
+        {activeTab === 'analytics' && (
+          <AnalyticsView
+            key="analytics"
+            analytics={analytics}
+            incidents={incidents}
+            loading={loading}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <SettingsView
+            key="settings"
+            wsStatus={wsStatus}
+          />
+        )}
+      </AnimatePresence>
+    </DashboardLayout>
+  );
+}
+
+// ─── Monitoring View ─────────────────────────────────────────────────────────
+function MonitoringView({ 
+  cameras, 
+  alerts, 
+  incidents, 
+  analytics,
+  loading, 
+  wsStatus,
+  expandedCamera,
+  setExpandedCamera,
+  highlightedCamera,
+  dismissAlert
+}) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2">
+          <SkeletonCameraGrid count={4} />
+        </div>
+        <div className="space-y-4">
+          <Card className="h-64" />
+          <Card className="h-48" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="grid grid-cols-1 xl:grid-cols-3 gap-6"
+    >
+      {/* Camera Grid */}
+      <div className="xl:col-span-2">
+        <CameraGrid
+          cameras={cameras}
+          alerts={alerts}
+          expandedCamera={expandedCamera}
+          setExpandedCamera={setExpandedCamera}
+          highlightedCamera={highlightedCamera}
+        />
+      </div>
+
+      {/* Right Panel - Alerts & Quick Analytics */}
+      <div className="space-y-6">
+        {/* Active Alerts Panel */}
+        <Card>
+          <CardHeader>
+            <CardTitle icon={<span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}>
+              Active Alerts
+            </CardTitle>
+            <Badge variant="outline" size="sm">
+              {Object.keys(alerts).length} live
+            </Badge>
+          </CardHeader>
+          <CardContent className="max-h-[50vh] overflow-y-auto">
+            {Object.keys(alerts).length > 0 ? (
+              <div className="space-y-3">
+                {Object.entries(alerts).map(([cameraId, alert]) => (
+                  <AlertPopupNew
+                    key={getAlertKey(alert)}
+                    alert={alert}
+                    onDismiss={() => dismissAlert(cameraId)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <NoAlerts />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <StatBox
+            label="Active Cameras"
+            value={cameras.filter(c => c.active).length}
+            icon={<Camera className="w-5 h-5" />}
+            color="blue"
+            size="sm"
+          />
+          <StatBox
+            label="Incidents Today"
+            value={incidents.length}
+            icon={<AlertTriangle className="w-5 h-5" />}
+            color="orange"
+            size="sm"
+          />
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 py-4">
-          {sidebarItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all ${
-                activeTab === item.id
-                  ? 'bg-[#242b3d] text-blue-400 border-l-3 border-blue-500'
-                  : 'text-gray-400 hover:bg-[#242b3d] hover:text-white'
-              }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span className="text-sm font-medium">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Connection Status */}
-        <div className="p-4 border-t border-[#2f3542]">
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              wsStatus === 'connected' ? 'bg-green-500' : 
-              wsStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
-            }`} />
-            <span className="text-xs text-gray-400 capitalize">{wsStatus}</span>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <header className="bg-[#1a1f2e] border-b border-[#2f3542] px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-semibold text-white">
-                {activeTab === 'monitoring' && 'Live Monitoring'}
-                {activeTab === 'incidents' && 'Incident History'}
-                {activeTab === 'analytics' && 'Analytics Dashboard'}
-                {activeTab === 'settings' && 'Settings'}
-              </h1>
-              <p className="text-sm text-gray-400">Real-time surveillance and threat detection</p>
-            </div>
-            
-            <div className="flex items-center gap-6">
-              {/* Quick Stats */}
-              <div className="flex items-center gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-white">{stats.active_cameras || 0}</div>
-                  <div className="text-[10px] text-gray-400 uppercase">Active Cameras</div>
-                </div>
-                <div className="w-px h-10 bg-[#2f3542]" />
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-400">{stats.total_incidents || 0}</div>
-                  <div className="text-[10px] text-gray-400 uppercase">Incidents</div>
-                </div>
-                <div className="w-px h-10 bg-[#2f3542]" />
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-400">{alertCount}</div>
-                  <div className="text-[10px] text-gray-400 uppercase">Alerts</div>
-                </div>
-              </div>
-
-              {/* Alert Indicator */}
-              {Object.keys(activeAlertsByCamera).length > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-red-500/20 border border-red-500/50 rounded-lg">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-sm text-red-400 font-medium">{Object.keys(activeAlertsByCamera).length} Active Alerts</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-auto p-6 bg-[#0f1419]">
-          {activeTab === 'monitoring' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Camera Grid - Takes 2 columns on xl screens */}
-              <div className="xl:col-span-2 space-y-6">
-                <MultiCameraGrid />
-              </div>
-
-              {/* Alert Panel - Takes 1 column */}
-              <div className="space-y-6">
-                {/* Current Alert */}
-                <div className="panel">
-                  <div className="panel-header">
-                    <span className="panel-title flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      Active Alerts
+        {/* Mini Analytics */}
+        {analytics && (
+          <Card>
+            <CardHeader>
+              <CardTitle icon={<Activity className="w-4 h-4" />}>
+                Quick Stats
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Object.entries(analytics.by_type || {}).slice(0, 4).map(([type, count]) => (
+                  <div key={type} className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {formatEventType(type)}
                     </span>
-                    <span className="text-xs text-gray-500">{Object.keys(activeAlertsByCamera).length} live</span>
+                    <Badge variant="outline" size="sm">{count}</Badge>
                   </div>
-                  <div className="panel-body">
-                    {Object.keys(activeAlertsByCamera).length > 0 ? (
-                      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                        {Object.values(activeAlertsByCamera).map((alertItem) => {
-                          const alertKey = getAlertKey(alertItem);
-                          const cameraId = getCameraId(alertItem);
-                          return (
-                            <AlertPopup
-                              key={alertKey}
-                              alert={alertItem}
-                              onDismiss={() => dismissAlert(cameraId)}
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <div className="text-4xl mb-2">✓</div>
-                        <div className="text-sm">No active alerts</div>
-                        <div className="text-xs text-gray-600">System is monitoring</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
-                {/* Quick Analytics */}
-                <AnalyticsPanel analytics={analytics} />
+      {/* Fullscreen Camera Modal */}
+      <AnimatePresence>
+        {expandedCamera && (
+          <FullscreenCamera
+            camera={cameras.find(c => c.id === expandedCamera)}
+            onClose={() => setExpandedCamera(null)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Camera Grid ─────────────────────────────────────────────────────────────
+function CameraGrid({ cameras, alerts, expandedCamera, setExpandedCamera, highlightedCamera }) {
+  if (cameras.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <NoCameras onAdd={() => window.location.href = '/'} />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {cameras.map((camera) => {
+        const hasAlert = !!alerts[camera.id];
+        const isHighlighted = highlightedCamera === camera.id;
+        const zone = ZONES.find(z => z.id === camera.zone);
+        
+        return (
+          <motion.div
+            key={camera.id}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={cn(
+              'camera-feed group relative aspect-video rounded-xl overflow-hidden',
+              'border border-border bg-card',
+              hasAlert && 'camera-feed alert border-red-500',
+              isHighlighted && 'ring-2 ring-red-500 ring-offset-2 ring-offset-background'
+            )}
+          >
+            {/* Video Feed */}
+            <img
+              src={`${BACKEND_URL}/video/${camera.id}`}
+              alt={camera.name}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.target.src = '/placeholder-camera.svg';
+              }}
+            />
+
+            {/* Top Overlay */}
+            <div className="camera-overlay">
+              <div className="flex items-center gap-2">
+                <LiveIndicator />
+                <Badge variant={camera.active ? 'online' : 'offline'} size="sm" dot>
+                  {camera.active ? 'Online' : 'Offline'}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" size="sm">
+                  {zone?.label || camera.zone}
+                </Badge>
+                <button
+                  onClick={() => setExpandedCamera(camera.id)}
+                  className="p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
-          )}
 
-          {activeTab === 'incidents' && (
-            <div className="panel">
-              <div className="panel-header">
-                <span className="panel-title">Incident History</span>
-                <span className="text-xs text-gray-500">{incidentList.length} total</span>
-              </div>
-              <div className="panel-body">
-                <IncidentList incidents={incidentList} />
-                
-                {/* STEP 8: DEBUG VISUALIZATION - Raw incident data */}
-                <div className="mt-6 pt-6 border-t border-[#2f3542]">
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-gray-400 hover:text-gray-300 font-mono">
-                      🔧 DEBUG: Raw Incident JSON ({incidentList.length} items)
-                    </summary>
-                    <pre className="mt-2 bg-[#1a1f2e] p-2 rounded overflow-x-auto text-[9px] text-gray-300 max-h-64 overflow-y-auto">
-{JSON.stringify(incidentList.map(inc => ({
-  id: inc.id,
-  event_type: inc.event?.event_type,
-  camera_id: inc.event?.camera_id,
-  zone: inc.event?.zone,
-  timestamp: inc.event?.timestamp,
-  priority: inc.alert?.priority,
-  summary_preview: inc.alert?.summary?.substring?.(0, 50)
-})), null, 2)}
-                    </pre>
-                  </details>
-                </div>
+            {/* Bottom Overlay */}
+            <div className="camera-overlay-bottom">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-white">{camera.name}</span>
+                {zone?.model && (
+                  <span className="text-[10px] text-white/70">Model: {zone.model}</span>
+                )}
               </div>
             </div>
-          )}
 
-          {activeTab === 'analytics' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AnalyticsPanel analytics={analytics} expanded />
-              <div className="panel">
-                <div className="panel-header">
-                  <span className="panel-title">Recent Incidents</span>
-                </div>
-                <div className="panel-body">
-                  {/* Show only 5 most recent incidents in analytics summary (full list available in Incidents tab) */}
-                  <IncidentList incidents={incidentList.slice(0, 5)} compact />
+            {/* Alert Badge */}
+            {hasAlert && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                <div className="px-4 py-2 bg-red-500/90 rounded-lg text-white font-medium text-sm animate-pulse">
+                  {formatEventType(getEventType(alerts[camera.id]))}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
 
-          {activeTab === 'settings' && (
-            <div className="panel max-w-2xl">
-              <div className="panel-header">
-                <span className="panel-title">System Settings</span>
-              </div>
-              <div className="panel-body space-y-4">
-                <div className="flex items-center justify-between py-3 border-b border-[#2f3542]">
-                  <div>
-                    <div className="text-sm text-white">Backend URL</div>
-                    <div className="text-xs text-gray-500">API endpoint for data</div>
-                  </div>
-                  <code className="text-xs bg-[#242b3d] px-3 py-1 rounded text-gray-300">{BACKEND_URL}</code>
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-[#2f3542]">
-                  <div>
-                    <div className="text-sm text-white">WebSocket Status</div>
-                    <div className="text-xs text-gray-500">Real-time connection</div>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    wsStatus === 'connected' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                  }`}>
-                    {wsStatus}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-3">
-                  <div>
-                    <div className="text-sm text-white">Refresh Rate</div>
-                    <div className="text-xs text-gray-500">Data polling interval</div>
-                  </div>
-                  <span className="text-xs text-gray-300">5 seconds</span>
-                </div>
-              </div>
-            </div>
-          )}
+// ─── Fullscreen Camera ───────────────────────────────────────────────────────
+function FullscreenCamera({ camera, onClose }) {
+  if (!camera) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9 }}
+        animate={{ scale: 1 }}
+        exit={{ scale: 0.9 }}
+        className="relative max-w-6xl w-full aspect-video rounded-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={`${BACKEND_URL}/video/${camera.id}`}
+          alt={camera.name}
+          className="w-full h-full object-contain bg-black"
+        />
+        
+        <div className="absolute top-4 left-4 flex items-center gap-3">
+          <LiveIndicator />
+          <span className="text-white font-medium">{camera.name}</span>
         </div>
-      </main>
+        
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors"
+        >
+          <Minimize2 className="w-5 h-5" />
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── Cameras View ────────────────────────────────────────────────────────────
+function CamerasView({ cameras, loading, expandedCamera, setExpandedCamera }) {
+  if (loading) {
+    return <SkeletonCameraGrid count={6} />;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cameras.map((camera) => {
+          const zone = ZONES.find(z => z.id === camera.zone);
+          
+          return (
+            <Card key={camera.id} hover className="overflow-hidden">
+              <div className="aspect-video relative">
+                <img
+                  src={`${BACKEND_URL}/video/${camera.id}`}
+                  alt={camera.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-2 right-2">
+                  <Badge variant={camera.active ? 'online' : 'offline'} size="sm" dot>
+                    {camera.active ? 'Online' : 'Offline'}
+                  </Badge>
+                </div>
+              </div>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-foreground">{camera.name}</h3>
+                    <p className="text-sm text-muted-foreground">{zone?.label || camera.zone}</p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setExpandedCamera(camera.id)}
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <AnimatePresence>
+        {expandedCamera && (
+          <FullscreenCamera
+            camera={cameras.find(c => c.id === expandedCamera)}
+            onClose={() => setExpandedCamera(null)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Incidents View ──────────────────────────────────────────────────────────
+function IncidentsView({ incidents, loading, markResolved }) {
+  if (loading) {
+    return <SkeletonTable rows={10} cols={5} />;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle>Incident Timeline</CardTitle>
+          <Badge variant="outline">{incidents.length} total</Badge>
+        </CardHeader>
+        <CardContent>
+          <IncidentTimeline 
+            incidents={incidents} 
+            onResolve={markResolved}
+          />
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ─── Analytics View ──────────────────────────────────────────────────────────
+function AnalyticsView({ analytics, incidents, loading }) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="h-80" />
+        <Card className="h-80" />
+        <Card className="h-64 lg:col-span-2" />
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+    >
+      <AnalyticsCharts 
+        analytics={analytics} 
+        incidents={incidents}
+      />
+    </motion.div>
+  );
+}
+
+// ─── Settings View ───────────────────────────────────────────────────────────
+function SettingsView({ wsStatus }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="max-w-2xl"
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle>System Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <SettingRow
+            label="Backend URL"
+            description="API endpoint for data"
+            value={<code className="text-xs bg-muted px-2 py-1 rounded">{BACKEND_URL}</code>}
+          />
+          <SettingRow
+            label="WebSocket Status"
+            description="Real-time connection"
+            value={<StatusIndicator status={wsStatus} />}
+          />
+          <SettingRow
+            label="Refresh Rate"
+            description="Data polling interval"
+            value={<span className="text-sm text-muted-foreground">10 seconds</span>}
+          />
+          <SettingRow
+            label="Theme"
+            description="Appearance settings"
+            value={<span className="text-sm text-muted-foreground">System (Dark)</span>}
+          />
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function SettingRow({ label, description, value }) {
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
+      <div>
+        <div className="text-sm font-medium text-foreground">{label}</div>
+        <div className="text-xs text-muted-foreground">{description}</div>
+      </div>
+      {value}
     </div>
   );
 }

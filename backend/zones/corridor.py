@@ -163,6 +163,9 @@ class CorridorProcessor(BaseZoneProcessor):
             self._update_suspicion("fight", False)
             return None
 
+        # Align poses to tracked persons before building history
+        poses = self._align_poses_with_tracks(poses, persons)
+
         # Update pose history
         for pose in poses:
             pid = pose.get("track_id")

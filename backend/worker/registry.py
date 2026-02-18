@@ -192,11 +192,17 @@ class ModelRegistry:
         """Resolve model file path — local > env dir > ultralytics auto-download."""
         base_dir = os.path.dirname(os.path.abspath(__file__))
 
-        # 1. Check ai_worker/models/ subfolder first
+        # 1. Check worker/models/ subfolder first
         models_dir = os.path.join(base_dir, "models")
         local_path = os.path.join(models_dir, model_file)
         if os.path.exists(local_path):
             return local_path
+
+        # 1b. Check backend/models/ (new monorepo layout)
+        parent_models_dir = os.path.abspath(os.path.join(base_dir, "..", "models"))
+        parent_path = os.path.join(parent_models_dir, model_file)
+        if os.path.exists(parent_path):
+            return parent_path
 
         # 2. Check same directory as registry.py
         flat_path = os.path.join(base_dir, model_file)

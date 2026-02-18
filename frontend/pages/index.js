@@ -1,103 +1,184 @@
+'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import AddCameraForm from '../components/AddCameraForm';
-import ModuleSelector from '../components/ModuleSelector';
+import { motion } from 'framer-motion';
+import { 
+  Camera, 
+  Play, 
+  Plus, 
+  Trash2, 
+  Edit2, 
+  CheckCircle,
+  Home,
+  GraduationCap,
+  Building,
+  Car,
+  Users,
+  MapPin,
+  BookOpen,
+  Search,
+  ChevronRight,
+  Shield,
+  Zap,
+  Eye
+} from 'lucide-react';
 
-const ZONES = [
-  { id: 'all', label: 'All Zones (Multi-Detection)', icon: '🔍', model: 'ALL' },
-  { id: 'outgate', label: 'Outgate / Gate Area', icon: '🚗', model: 'yolov8n.pt' },
-  { id: 'corridor', label: 'Corridor / Hallway', icon: '🚶', model: 'yolov8s.pt' },
-  { id: 'school_ground', label: 'School Ground', icon: '🏃', model: 'yolov8s.pt' },
-  { id: 'classroom', label: 'Classroom', icon: '📚', model: 'yolov8m.pt' },
-];
+import { Card, CardContent } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { Modal } from '../components/ui/Modal';
+import { Input, Select, Checkbox } from '../components/ui/Input';
+import { StatusIndicator } from '../components/ui/StatusIndicator';
+import { EmptyState } from '../components/ui/EmptyState';
 
-const DEFAULT_CAMERAS = [
-  { id: 'cam_outgate', name: 'Outgate Camera', zone: 'outgate', active: true },
-  { id: 'cam_corridor', name: 'Corridor Camera', zone: 'corridor', active: true },
-  { id: 'cam_ground', name: 'School Ground Camera', zone: 'school_ground', active: true },
-  { id: 'cam_classroom', name: 'Classroom Camera', zone: 'classroom', active: true },
-];
+import { BACKEND_URL, ZONES, MODULES, DEFAULT_CAMERAS } from '../lib/constants';
+import { cn } from '../lib/utils';
 
-// ─── API Configuration ───────────────────────────────────────────────────────
-// For local development, uncomment the line below:
-// const BACKEND_URL = 'http://localhost:8000';
+// Zone icons mapping
+const ZONE_ICONS = {
+  all: Search,
+  outgate: Car,
+  corridor: Users,
+  school_ground: MapPin,
+  classroom: BookOpen,
+};
 
-// For production (Vercel + Render), use environment variable:
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+// Module icons mapping
+const MODULE_ICONS = {
+  home: Home,
+  school: GraduationCap,
+  office: Building,
+};
 
-export default function Landing() {
+export default function LandingPage() {
   const router = useRouter();
   const [cameras, setCameras] = useState(DEFAULT_CAMERAS);
   const [selectedModule, setSelectedModule] = useState('school');
   const [loading, setLoading] = useState(false);
-  const [showAddCamera, setShowAddCamera] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCamera, setEditingCamera] = useState(null);
+  const [cameraHealth, setCameraHealth] = useState({});
 
+  // Load current module
   useEffect(() => {
-    let mounted = true;
-
     async function loadCurrentModule() {
       try {
         const res = await fetch(`${BACKEND_URL}/api/module/current`);
-        if (!res.ok) {
-          return;
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.module) setSelectedModule(data.module);
         }
-        const data = await res.json();
-        if (mounted && data?.module) {
-          setSelectedModule(data.module);
-        }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
-
     loadCurrentModule();
-
-    return () => {
-      mounted = false;
-    };
   }, []);
 
+  // Load cameras for selected module
   useEffect(() => {
-    let mounted = true;
-
-    async function loadCamerasForModule() {
+    async function loadCameras() {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/cameras?module=${encodeURIComponent(selectedModule)}`);
-        if (!res.ok) {
-          throw new Error('Failed to load cameras');
-        }
-        const data = await res.json();
-        if (mounted) {
+        const res = await fetch(`${BACKEND_URL}/api/cameras?module=${selectedModule}`);
+        if (res.ok) {
+          const data = await res.json();
           setCameras(data.cameras?.length ? data.cameras : DEFAULT_CAMERAS);
         }
       } catch {
-        if (mounted) {
-          setCameras(DEFAULT_CAMERAS);
-        }
+        setCameras(DEFAULT_CAMERAS);
       }
     }
-
-    loadCamerasForModule();
-
-    return () => {
-      mounted = false;
-    };
+    loadCameras();
   }, [selectedModule]);
 
-  const handleCameraChange = (idx, field, value) => {
-    setCameras((prev) => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
-      return next;
-    });
+  // Check camera health
+  useEffect(() => {
+    async function checkHealth() {
+      const healthMap = {};
+      for (const cam of cameras) {
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/camera/${cam.id}/health`, {
+            method: 'GET',
+          });
+          healthMap[cam.id] = res.ok ? 'online' : 'offline';
+        } catch {
+          healthMap[cam.id] = 'offline';
+        }
+      }
+      setCameraHealth(healthMap);
+    }
+    if (cameras.length > 0) {
+      checkHealth();
+      const interval = setInterval(checkHealth, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [cameras]);
+
+  const handleModuleSelect = (moduleId) => {
+    setSelectedModule(moduleId);
+  };
+
+  const handleAddCamera = async (cameraData) => {
+    const newCamera = {
+      id: `cam_${Date.now()}`,
+      ...cameraData,
+      active: true,
+      status: 'online',
+    };
+    
+    try {
+      await fetch(`${BACKEND_URL}/api/camera/${newCamera.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCamera),
+      });
+    } catch (e) {
+      console.error('Failed to add camera:', e);
+    }
+    
+    setCameras(prev => [...prev, newCamera]);
+    setShowAddModal(false);
+  };
+
+  const handleEditCamera = async (cameraData) => {
+    const updatedCamera = { ...editingCamera, ...cameraData };
+    
+    try {
+      await fetch(`${BACKEND_URL}/api/camera/${updatedCamera.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedCamera),
+      });
+    } catch (e) {
+      console.error('Failed to update camera:', e);
+    }
+    
+    setCameras(prev => prev.map(c => c.id === updatedCamera.id ? updatedCamera : c));
+    setEditingCamera(null);
+  };
+
+  const handleDeleteCamera = async (cameraId) => {
+    try {
+      await fetch(`${BACKEND_URL}/api/camera/${cameraId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Failed to delete camera:', e);
+    }
+    setCameras(prev => prev.filter(c => c.id !== cameraId));
+  };
+
+  const handleToggleActive = (cameraId) => {
+    setCameras(prev => prev.map(c => 
+      c.id === cameraId ? { ...c, active: !c.active } : c
+    ));
   };
 
   const handleStartMonitoring = async () => {
     setLoading(true);
+    
+    // Save config
     const config = { module: selectedModule, cameras };
     window.localStorage.setItem('sentinel_config', JSON.stringify(config));
 
+    // Set module
     try {
       await fetch(`${BACKEND_URL}/api/module`, {
         method: 'POST',
@@ -108,7 +189,7 @@ export default function Landing() {
       console.error('Failed to set module:', selectedModule);
     }
     
-    // Sync cameras to backend
+    // Sync cameras
     for (const cam of cameras) {
       try {
         await fetch(`${BACKEND_URL}/api/camera/${cam.id}`, {
@@ -124,182 +205,340 @@ export default function Landing() {
     router.push('/monitor');
   };
 
-  const handleCameraAdded = (newCamera) => {
-    setCameras(prev => [...prev, newCamera]);
-    setShowAddCamera(false);
-  };
+  const activeCount = cameras.filter(c => c.active).length;
+  const onlineCount = Object.values(cameraHealth).filter(s => s === 'online').length;
 
-  const handleDeleteCamera = async (cameraId) => {
-    try {
-      await fetch(`${BACKEND_URL}/api/camera/${cameraId}`, { method: 'DELETE' });
-    } catch (e) {
-      console.error('Failed to delete camera:', cameraId);
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+        
+        <div className="relative max-w-7xl mx-auto px-6 pt-12 pb-8">
+          {/* Logo & Header */}
+          <div className="flex items-center justify-between mb-12">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+                <Eye className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-foreground">SentinelAI</h1>
+                <p className="text-muted-foreground">AI-Powered School Safety System</p>
+              </div>
+            </div>
+            
+            {/* Quick Stats */}
+            <div className="hidden md:flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-foreground">{cameras.length}</div>
+                <div className="text-xs text-muted-foreground">Cameras</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-400">{activeCount}</div>
+                <div className="text-xs text-muted-foreground">Active</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-400">{onlineCount}</div>
+                <div className="text-xs text-muted-foreground">Online</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Feature Pills */}
+          <div className="flex flex-wrap gap-3 mb-8">
+            <FeaturePill icon={Zap} text="Real-time Detection" />
+            <FeaturePill icon={Shield} text="YOLOv8 AI Models" />
+            <FeaturePill icon={Camera} text="Multi-Zone Monitoring" />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 pb-12 space-y-8">
+        {/* Module Selection */}
+        <section>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Select Environment</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {MODULES.map((module) => {
+              const Icon = MODULE_ICONS[module.id];
+              const isSelected = selectedModule === module.id;
+              
+              return (
+                <motion.button
+                  key={module.id}
+                  onClick={() => handleModuleSelect(module.id)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={cn(
+                    'relative p-6 rounded-2xl border-2 transition-all text-left',
+                    isSelected
+                      ? 'bg-blue-500/10 border-blue-500 shadow-lg shadow-blue-500/10'
+                      : 'bg-card border-border hover:border-border-hover'
+                  )}
+                >
+                  {isSelected && (
+                    <div className="absolute top-3 right-3">
+                      <CheckCircle className="w-5 h-5 text-blue-400" />
+                    </div>
+                  )}
+                  
+                  <div className={cn(
+                    'w-12 h-12 rounded-xl flex items-center justify-center mb-3',
+                    isSelected ? 'bg-blue-500/20' : 'bg-muted'
+                  )}>
+                    <Icon className={cn('w-6 h-6', isSelected ? 'text-blue-400' : 'text-muted-foreground')} />
+                  </div>
+                  
+                  <h3 className={cn(
+                    'text-lg font-semibold mb-1',
+                    isSelected ? 'text-blue-400' : 'text-foreground'
+                  )}>
+                    {module.label}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">{module.description}</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Videos from: test_videos/{module.id}
+                  </p>
+                </motion.button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Zone Capabilities */}
+        <section>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Detection Zones</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {ZONES.filter(z => z.id !== 'all').map((zone) => {
+              const Icon = ZONE_ICONS[zone.id];
+              
+              return (
+                <Card key={zone.id} className="p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={cn(
+                      'w-10 h-10 rounded-lg flex items-center justify-center',
+                      zone.color === 'blue' && 'bg-blue-500/20 text-blue-400',
+                      zone.color === 'green' && 'bg-green-500/20 text-green-400',
+                      zone.color === 'orange' && 'bg-orange-500/20 text-orange-400',
+                      zone.color === 'cyan' && 'bg-cyan-500/20 text-cyan-400',
+                    )}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-foreground text-sm">{zone.label}</h3>
+                      <p className="text-[10px] text-muted-foreground">{zone.description}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" size="sm" className="mt-2">
+                    {zone.model}
+                  </Badge>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Camera Configuration */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground">Camera Configuration</h2>
+            <Button onClick={() => setShowAddModal(true)} size="sm">
+              <Plus className="w-4 h-4" />
+              Add Camera
+            </Button>
+          </div>
+
+          {cameras.length === 0 ? (
+            <Card>
+              <CardContent>
+                <EmptyState
+                  icon="camera"
+                  title="No cameras configured"
+                  description="Add your first camera to start monitoring"
+                  action={() => setShowAddModal(true)}
+                  actionLabel="Add Camera"
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Camera Name</th>
+                      <th>Zone</th>
+                      <th>Status</th>
+                      <th>Active</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cameras.map((camera) => {
+                      const zone = ZONES.find(z => z.id === camera.zone);
+                      const health = cameraHealth[camera.id] || 'offline';
+                      
+                      return (
+                        <tr key={camera.id}>
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                                <Camera className="w-4 h-4 text-muted-foreground" />
+                              </div>
+                              <span className="font-medium">{camera.name}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <Badge variant="outline" size="sm">
+                              {zone?.label || camera.zone}
+                            </Badge>
+                          </td>
+                          <td>
+                            <StatusIndicator status={health} size="sm" />
+                          </td>
+                          <td>
+                            <Checkbox
+                              checked={camera.active}
+                              onChange={() => handleToggleActive(camera.id)}
+                            />
+                          </td>
+                          <td>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setEditingCamera(camera)}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCamera(camera.id)}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </section>
+
+        {/* Start Monitoring CTA */}
+        <div className="flex items-center justify-between p-6 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-blue-500/10 rounded-2xl border border-blue-500/20">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground mb-1">Ready to Start?</h3>
+            <p className="text-sm text-muted-foreground">
+              {activeCount} camera{activeCount !== 1 ? 's' : ''} configured and ready for monitoring
+            </p>
+          </div>
+          <Button 
+            onClick={handleStartMonitoring} 
+            loading={loading}
+            size="lg"
+            className="gap-2"
+          >
+            <Play className="w-5 h-5" />
+            Start Monitoring
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Add Camera Modal */}
+      <CameraFormModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleAddCamera}
+        title="Add New Camera"
+      />
+
+      {/* Edit Camera Modal */}
+      <CameraFormModal
+        isOpen={!!editingCamera}
+        onClose={() => setEditingCamera(null)}
+        onSubmit={handleEditCamera}
+        camera={editingCamera}
+        title="Edit Camera"
+      />
+
+      {/* Footer */}
+      <footer className="text-center py-6 border-t border-border">
+        <p className="text-sm text-muted-foreground">
+          SentinelAI School Safety System v1.0 — Powered by YOLOv8
+        </p>
+      </footer>
+    </div>
+  );
+}
+
+// Feature Pill Component
+function FeaturePill({ icon: Icon, text }) {
+  return (
+    <div className="inline-flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-full">
+      <Icon className="w-4 h-4 text-blue-400" />
+      <span className="text-sm text-foreground">{text}</span>
+    </div>
+  );
+}
+
+// Camera Form Modal
+function CameraFormModal({ isOpen, onClose, onSubmit, camera, title }) {
+  const [name, setName] = useState('');
+  const [zone, setZone] = useState('outgate');
+
+  useEffect(() => {
+    if (camera) {
+      setName(camera.name || '');
+      setZone(camera.zone || 'outgate');
+    } else {
+      setName('');
+      setZone('outgate');
     }
-    setCameras(prev => prev.filter(c => c.id !== cameraId));
+  }, [camera, isOpen]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSubmit({ name: name.trim(), zone });
   };
 
   return (
-    <div className="min-h-screen bg-[#0f1419] flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </div>
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-white">SentinelAI</h1>
-              <p className="text-sm text-gray-400">School Safety Monitoring System</p>
-            </div>
-          </div>
+    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Camera Name"
+          placeholder="Enter camera name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+        
+        <Select
+          label="Zone Assignment"
+          value={zone}
+          onChange={(e) => setZone(e.target.value)}
+          options={ZONES.filter(z => z.id !== 'all').map(z => ({
+            value: z.id,
+            label: z.label
+          }))}
+        />
+
+        <div className="flex justify-end gap-3 pt-4">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit">
+            {camera ? 'Save Changes' : 'Add Camera'}
+          </Button>
         </div>
-
-        {/* Main Card */}
-        <div className="bg-[#1a1f2e] rounded-2xl border border-[#2f3542] p-6 shadow-2xl">
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-white mb-2">Configure Cameras & Zones</h2>
-            <p className="text-sm text-gray-400">
-              Assign each camera to a specific zone for targeted detection. Each zone has specialized detection capabilities.
-            </p>
-            <div className="mt-4">
-              <div className="text-xs text-gray-400 mb-2">Choose Video Module Folder</div>
-              <ModuleSelector selected={selectedModule} onChange={setSelectedModule} />
-              <div className="text-[11px] text-gray-500 mt-2">
-                Loading videos from test_videos/{selectedModule}
-              </div>
-            </div>
-          </div>
-
-          {/* Zone Legend */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            {ZONES.map((zone) => (
-              <div key={zone.id} className="bg-[#242b3d] rounded-lg p-3 border border-[#2f3542]">
-                <div className="text-2xl mb-1">{zone.icon}</div>
-                <div className="text-xs font-medium text-white">{zone.label}</div>
-                <div className="text-[10px] text-gray-500 mt-1">
-                  {zone.id === 'outgate' && 'Vehicle & accident detection'}
-                  {zone.id === 'corridor' && 'Crowd & fight detection'}
-                  {zone.id === 'school_ground' && 'Crowd & fight detection'}
-                  {zone.id === 'classroom' && 'Mobile phone detection'}
-                </div>
-                <div className="text-[9px] text-purple-400 mt-1">Model: {zone.model}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Add Camera Button / Form */}
-          {showAddCamera ? (
-            <div className="mb-6">
-              <AddCameraForm 
-                onCameraAdded={handleCameraAdded}
-                onCancel={() => setShowAddCamera(false)}
-              />
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddCamera(true)}
-              className="mb-6 w-full py-3 border-2 border-dashed border-[#2f3542] rounded-lg text-gray-400 hover:border-cyan-500 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add New Camera
-            </button>
-          )}
-
-          {/* Camera Configuration */}
-          <div className="space-y-3 mb-6">
-            <div className="text-sm font-medium text-gray-300 mb-2">Camera Configuration</div>
-            {cameras.map((cam, idx) => (
-              <div
-                key={cam.id}
-                className="bg-[#242b3d] rounded-lg p-4 border border-[#2f3542] grid grid-cols-1 md:grid-cols-4 gap-4"
-              >
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Camera Name</label>
-                  <input
-                    className="w-full bg-[#1a1f2e] border border-[#2f3542] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                    placeholder="Camera name"
-                    value={cam.name}
-                    onChange={(e) => handleCameraChange(idx, 'name', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Zone Assignment</label>
-                  <select
-                    className="w-full bg-[#1a1f2e] border border-[#2f3542] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                    value={cam.zone}
-                    onChange={(e) => handleCameraChange(idx, 'zone', e.target.value)}
-                  >
-                    {ZONES.map((z) => (
-                      <option key={z.id} value={z.id}>{z.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={cam.active}
-                      onChange={(e) => handleCameraChange(idx, 'active', e.target.checked)}
-                      className="w-4 h-4 rounded border-[#2f3542] bg-[#1a1f2e] text-blue-500 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-300">Active</span>
-                  </label>
-                </div>
-                <div className="flex items-end justify-end">
-                  <button
-                    onClick={() => handleDeleteCamera(cam.id)}
-                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Start Button */}
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500">
-              Videos are loaded from the selected module folder and auto-mapped to zones by folder/file names.
-            </div>
-            <button
-              type="button"
-              onClick={handleStartMonitoring}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Starting...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Start Monitoring
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center mt-6 text-xs text-gray-500">
-          SentinelAI School Safety System v1.0 - Powered by YOLOv8
-        </div>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 

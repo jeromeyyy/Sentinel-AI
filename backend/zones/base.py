@@ -367,6 +367,42 @@ class BaseZoneProcessor(ABC):
         )
 
     # ------------------------------------------------------------------
+    # Pose ↔ track alignment helper
+    # ------------------------------------------------------------------
+
+    def _align_poses_with_tracks(
+        self,
+        poses: List[Dict[str, Any]],
+        persons: List[TrackedObject],
+        iou_threshold: float = 0.2,
+    ) -> List[Dict[str, Any]]:
+        """
+        Assign tracker IDs to pose detections using IoU with tracked persons.
+
+        Pose detector often returns no track_id; this aligns poses to tracked
+        person boxes so pose-based fight/fall checks work reliably.
+        """
+        if not poses or not persons:
+            return poses
+
+        for pose in poses:
+            if pose.get("track_id") is not None and pose.get("track_id") >= 0:
+                continue
+
+            best_person = None
+            best_iou = 0.0
+            for person in persons:
+                iou = self.compute_iou(pose.get("bbox", [0, 0, 0, 0]), person.bbox)
+                if iou > best_iou:
+                    best_iou = iou
+                    best_person = person
+
+            if best_person is not None and best_iou >= iou_threshold:
+                pose["track_id"] = best_person.object_id
+
+        return poses
+
+    # ------------------------------------------------------------------
     # Suspicion + cooldown helpers (with per-event-type cooldowns)
     # ------------------------------------------------------------------
 

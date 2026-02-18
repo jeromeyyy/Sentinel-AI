@@ -43,6 +43,12 @@ import threading
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Any
 
+# Ensure backend root is on sys.path for package imports (zones, models)
+import sys
+BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, BACKEND_ROOT)
+
 load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
