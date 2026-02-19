@@ -22,8 +22,12 @@ import {
   Shield,
   Zap,
   Eye,
+<<<<<<< HEAD
   LogIn,
   User
+=======
+  Loader2
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 } from 'lucide-react';
 
 import { Card, CardContent } from '../components/ui/Card';
@@ -33,6 +37,11 @@ import { Modal } from '../components/ui/Modal';
 import { Input, Select, Checkbox } from '../components/ui/Input';
 import { StatusIndicator } from '../components/ui/StatusIndicator';
 import { EmptyState } from '../components/ui/EmptyState';
+<<<<<<< HEAD
+=======
+import SetupWizard from '../components/SetupWizard';
+import GoogleLoginButton, { AuthStatus, useAuth } from '../components/GoogleLogin';
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 import { BACKEND_URL, ZONES, MODULES, DEFAULT_CAMERAS } from '../lib/constants';
 import { cn } from '../lib/utils';
@@ -55,11 +64,17 @@ const MODULE_ICONS = {
 
 export default function LandingPage() {
   const router = useRouter();
+<<<<<<< HEAD
   const [cameras, setCameras] = useState(DEFAULT_CAMERAS);
+=======
+  const { user, loading: authLoading } = useAuth();
+  const [cameras, setCameras] = useState([]);
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
   const [selectedModule, setSelectedModule] = useState('school');
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCamera, setEditingCamera] = useState(null);
+<<<<<<< HEAD
   const [cameraHealth, setCameraHealth] = useState({});
   const [tenantName, setTenantName] = useState('');
   const [authUser, setAuthUser] = useState(null);
@@ -98,6 +113,33 @@ export default function LandingPage() {
       router.replace('/login');
     }
   }, [authEnabled, authChecked, authUser, router]);
+=======
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [wizardCamera, setWizardCamera] = useState(null);
+
+  const handleWizardComplete = (cameraData) => {
+    if (wizardCamera) {
+      // Editing existing camera
+      setCameras(prev => prev.map(c => c.id === cameraData.id ? cameraData : c));
+    } else {
+      // Adding new camera
+      setCameras(prev => [...prev, cameraData]);
+    }
+    setShowSetupWizard(false);
+    setWizardCamera(null);
+  };
+
+  const openWizardForNew = () => {
+    setWizardCamera(null);
+    setShowSetupWizard(true);
+  };
+
+  const openWizardForEdit = (camera) => {
+    setWizardCamera(camera);
+    setShowSetupWizard(true);
+  };
+  const [cameraHealth, setCameraHealth] = useState({});
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
   // Load current module
   useEffect(() => {
@@ -120,10 +162,17 @@ export default function LandingPage() {
         const res = await fetch(`${BACKEND_URL}/api/cameras?module=${selectedModule}`);
         if (res.ok) {
           const data = await res.json();
+<<<<<<< HEAD
           setCameras(data.cameras?.length ? data.cameras : DEFAULT_CAMERAS);
         }
       } catch {
         setCameras(DEFAULT_CAMERAS);
+=======
+          setCameras(Array.isArray(data.cameras) ? data.cameras : []);
+        }
+      } catch {
+        setCameras([]);
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
       }
     }
     loadCameras();
@@ -212,6 +261,7 @@ export default function LandingPage() {
 
   const handleStartMonitoring = async () => {
     setLoading(true);
+<<<<<<< HEAD
 
     if (authEnabled && !authUser) {
       setLoading(false);
@@ -236,6 +286,8 @@ export default function LandingPage() {
         console.error('Failed to create tenant:', e);
       }
     }
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     
     // Save config
     const config = { module: selectedModule, cameras };
@@ -270,10 +322,75 @@ export default function LandingPage() {
 
   const activeCount = cameras.filter(c => c.active).length;
   const onlineCount = Object.values(cameraHealth).filter(s => s === 'online').length;
+<<<<<<< HEAD
   const shouldBlock = authEnabled && !authChecked;
 
   if (shouldBlock) {
     return <div className="min-h-screen bg-background" />;
+=======
+
+  // Loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+            <Eye className="w-8 h-8 text-white" />
+          </div>
+          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Auth Gate - Show login page if not authenticated
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative z-10 max-w-md w-full mx-6 p-8 bg-card border border-border rounded-3xl shadow-2xl"
+        >
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg shadow-blue-500/25 mb-6">
+              <Eye className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">SentinelAI</h1>
+            <p className="text-muted-foreground">AI-Powered School Safety System</p>
+          </div>
+
+          <div className="space-y-4">
+            <GoogleLoginButton fullWidth size="lg" />
+            
+            <p className="text-xs text-center text-muted-foreground">
+              Sign in with your Google account to access the dashboard
+            </p>
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-border">
+            <div className="flex justify-center gap-6 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Shield className="w-3 h-3" /> Secure
+              </span>
+              <span className="flex items-center gap-1">
+                <Zap className="w-3 h-3" /> Real-time
+              </span>
+              <span className="flex items-center gap-1">
+                <Camera className="w-3 h-3" /> Multi-Zone
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
   }
 
   return (
@@ -297,6 +414,7 @@ export default function LandingPage() {
               </div>
             </div>
             
+<<<<<<< HEAD
             {/* Quick Stats + Auth */}
             <div className="hidden md:flex items-center gap-6">
               <div className="text-center">
@@ -329,6 +447,34 @@ export default function LandingPage() {
                   )}
                 </div>
               )}
+=======
+            {/* Auth, Stats & Setup Wizard */}
+            <div className="hidden md:flex items-center gap-6">
+              {/* Quick Stats */}
+              <div className="flex items-center gap-6 border-r border-border pr-6">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-foreground">{cameras.length}</div>
+                  <div className="text-xs text-muted-foreground">Cameras</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-400">{activeCount}</div>
+                  <div className="text-xs text-muted-foreground">Active</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-400">{onlineCount}</div>
+                  <div className="text-xs text-muted-foreground">Online</div>
+                </div>
+              </div>
+              
+              {/* Setup Wizard Button */}
+              <Button onClick={openWizardForNew} size="sm" className="gap-2">
+                <Plus className="w-4 h-4" />
+                Setup Camera
+              </Button>
+              
+              {/* User Auth */}
+              <AuthStatus />
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
             </div>
           </div>
 
@@ -342,6 +488,7 @@ export default function LandingPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 pb-12 space-y-8">
+<<<<<<< HEAD
         {/* Tenant & Setup */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
@@ -388,6 +535,8 @@ export default function LandingPage() {
           </Card>
         </section>
 
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         {/* Module Selection */}
         <section>
           <h2 className="text-lg font-semibold text-foreground mb-4">Select Environment</h2>
@@ -475,7 +624,11 @@ export default function LandingPage() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-foreground">Camera Configuration</h2>
+<<<<<<< HEAD
             <Button onClick={() => setShowAddModal(true)} size="sm">
+=======
+            <Button onClick={openWizardForNew} size="sm">
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
               <Plus className="w-4 h-4" />
               Add Camera
             </Button>
@@ -488,7 +641,11 @@ export default function LandingPage() {
                   icon="camera"
                   title="No cameras configured"
                   description="Add your first camera to start monitoring"
+<<<<<<< HEAD
                   action={() => setShowAddModal(true)}
+=======
+                  action={openWizardForNew}
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
                   actionLabel="Add Camera"
                 />
               </CardContent>
@@ -538,7 +695,11 @@ export default function LandingPage() {
                           <td>
                             <div className="flex items-center justify-end gap-2">
                               <button
+<<<<<<< HEAD
                                 onClick={() => setEditingCamera(camera)}
+=======
+                                onClick={() => openWizardForEdit(camera)}
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
                                 className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                               >
                                 <Edit2 className="w-4 h-4" />
@@ -582,7 +743,11 @@ export default function LandingPage() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Add Camera Modal */}
+=======
+      {/* Add Camera Modal (Legacy - keep for backward compat) */}
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
       <CameraFormModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
@@ -590,7 +755,11 @@ export default function LandingPage() {
         title="Add New Camera"
       />
 
+<<<<<<< HEAD
       {/* Edit Camera Modal */}
+=======
+      {/* Edit Camera Modal (Legacy - keep for backward compat) */}
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
       <CameraFormModal
         isOpen={!!editingCamera}
         onClose={() => setEditingCamera(null)}
@@ -599,6 +768,20 @@ export default function LandingPage() {
         title="Edit Camera"
       />
 
+<<<<<<< HEAD
+=======
+      {/* Setup Wizard */}
+      <SetupWizard
+        isOpen={showSetupWizard}
+        onClose={() => {
+          setShowSetupWizard(false);
+          setWizardCamera(null);
+        }}
+        onComplete={handleWizardComplete}
+        existingCamera={wizardCamera}
+      />
+
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
       {/* Footer */}
       <footer className="text-center py-6 border-t border-border">
         <p className="text-sm text-muted-foreground">

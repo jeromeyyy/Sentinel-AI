@@ -109,6 +109,13 @@ class ClassroomProcessor(BaseZoneProcessor):
         phones:   List[TrackedObject],
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
+<<<<<<< HEAD
+=======
+        # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
+        if not self._can_emit_event("mobile_usage"):
+            self._update_suspicion("mobile_usage", False)
+            return None
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if not persons or not phones:
             self._mobile_start_time = None
@@ -187,6 +194,14 @@ class ClassroomProcessor(BaseZoneProcessor):
         1. Pose-based  (if pose model output available): wrist velocity + proximity
         2. BBox heuristic fallback: IoU overlap + motion intensity
         """
+<<<<<<< HEAD
+=======
+        # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
+        if not self._can_emit_event("fight"):
+            self._update_suspicion("fight", False)
+            return None
+        
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         if len(persons) < 2:
             self._fight_frame_count = 0
             self._update_suspicion("fight", False)

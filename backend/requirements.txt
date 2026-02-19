@@ -5,6 +5,12 @@ uvicorn[standard]>=0.24.0
 python-multipart>=0.0.6
 websockets>=12.0
 
+<<<<<<< HEAD
+=======
+# Authentication
+PyJWT>=2.8.0
+
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 # AI/ML - YOLOv8
 ultralytics>=8.0.0
 torch>=2.0.0
@@ -22,6 +28,7 @@ httpx>=0.25.0
 # Environment
 python-dotenv>=1.0.0
 
+<<<<<<< HEAD
 # Auth & Security
 authlib>=1.3.0
 python-jose[cryptography]>=3.3.0
@@ -29,6 +36,8 @@ python-jose[cryptography]>=3.3.0
 # Redis
 redis>=5.0.0
 
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 # Image Processing
 Pillow>=10.0.0
 

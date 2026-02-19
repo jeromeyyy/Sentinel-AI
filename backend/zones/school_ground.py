@@ -141,6 +141,13 @@ class SchoolGroundProcessor(BaseZoneProcessor):
         persons:  List[TrackedObject],
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
+<<<<<<< HEAD
+=======
+        # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
+        if not self._can_emit_event("crowd_formation"):
+            self._update_suspicion("crowd_formation", False)
+            return None
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if len(persons) < self.MIN_CROWD_SIZE:
             self._crowd_start_time = None
@@ -194,6 +201,13 @@ class SchoolGroundProcessor(BaseZoneProcessor):
         poses:    list,
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
+<<<<<<< HEAD
+=======
+        # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
+        if not self._can_emit_event("fight"):
+            self._update_suspicion("fight", False)
+            return None
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if len(persons) < 2:
             self._fight_frame_count = 0
@@ -321,6 +335,14 @@ class SchoolGroundProcessor(BaseZoneProcessor):
         1. Pose-based: hip-shoulder angle near horizontal (< FALL_POSE_ANGLE_THRESHOLD)
         2. Bbox aspect ratio fallback: width > height × threshold
         """
+<<<<<<< HEAD
+=======
+        # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
+        if not self._can_emit_event("fall_detected"):
+            self._update_suspicion("fall_detected", False)
+            return None
+        
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         if not persons:
             self._fall_frame_count = 0
             self._update_suspicion("fall_detected", False)

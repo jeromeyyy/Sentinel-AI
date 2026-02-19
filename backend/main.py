@@ -1,6 +1,9 @@
-from fastapi import FastAPI, WebSocket, Request, Response
+from fastapi import FastAPI, WebSocket, Request, Response, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+<<<<<<< HEAD
 from starlette.middleware.sessions import SessionMiddleware
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import logging
@@ -11,8 +14,12 @@ import io
 import json
 import glob
 from pathlib import Path
+<<<<<<< HEAD
 import uuid
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
+=======
+from fastapi.responses import StreamingResponse, JSONResponse
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 from reportlab.pdfgen import canvas
 import cv2
 import threading
@@ -20,6 +27,7 @@ import time
 from typing import Dict, List, Optional
 import asyncio
 from dotenv import load_dotenv
+<<<<<<< HEAD
 from datetime import datetime, timedelta
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
@@ -31,6 +39,12 @@ from json_store import load_cameras, save_cameras, load_incidents, save_incident
 # Load environment variables
 load_dotenv()
 
+=======
+
+# Load environment variables
+load_dotenv()
+
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 # ============================================================================
 # ENVIRONMENT CONFIGURATION
 # ============================================================================
@@ -39,6 +53,7 @@ MODULE = os.getenv("MODULE", "school")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "*")  # Set to your Vercel domain in production
+<<<<<<< HEAD
 
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
 JWT_SECRET = os.getenv("JWT_SECRET", "dev_secret_change_me")
@@ -51,6 +66,12 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 JSON_STORE_ENABLED = os.getenv("JSON_STORE_ENABLED", "false").lower() == "true"
 
 VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm")
+=======
+AUTO_DISCOVER_TEST_VIDEOS = os.getenv("AUTO_DISCOVER_TEST_VIDEOS", "0").lower() in ("1", "true", "yes", "on")
+
+VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm")
+ALLOWED_UPLOAD_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 ZONE_CYCLE = ["outgate", "corridor", "school_ground", "classroom"]
 SUPPORTED_MODULES = ["home", "school", "office"]
 DEFAULT_MODULE = MODULE  # Use env var
@@ -90,6 +111,7 @@ except ImportError:
     process_event = lambda event: {"incident": False}
     trigger_alert = lambda incident: {"alert": False, "summary": "(mock)"}
 
+<<<<<<< HEAD
 app = FastAPI(title="SentinelAI Backend")
 
 SESSION_COOKIE_NAME = "sentinel_session"
@@ -137,6 +159,29 @@ def _get_user_from_request(request: Request) -> Optional[dict]:
         return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except JWTError:
         return None
+=======
+# Import auth module
+try:
+    from auth import (
+        get_google_auth_url, 
+        exchange_code_for_tokens, 
+        get_google_user_info,
+        get_or_create_user,
+        create_jwt_token,
+        get_current_user,
+        require_auth,
+        User,
+        TokenResponse,
+        FRONTEND_URL,
+        JWT_EXPIRATION_HOURS,
+    )
+    AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
+except ImportError as e:
+    logging.warning(f"Auth module not available: {e}")
+    AUTH_ENABLED = False
+
+app = FastAPI(title="SentinelAI Backend")
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 # Configure CORS - use FRONTEND_URL env var in production
 allowed_origins = ["*"] if FRONTEND_URL == "*" else [
@@ -157,7 +202,10 @@ app.add_middleware(
 # ============================================================================
 alerts_history: List[Dict] = []
 incidents: Dict[str, Dict] = {}
+<<<<<<< HEAD
 tenants: Dict[str, Dict] = {}
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 active_alert_clients: List[WebSocket] = []
 alert_broadcast_queue: asyncio.Queue = asyncio.Queue()
 
@@ -165,6 +213,7 @@ alert_broadcast_queue: asyncio.Queue = asyncio.Queue()
 camera_configs: Dict[str, Dict] = {}
 selected_module: str = DEFAULT_MODULE
 
+<<<<<<< HEAD
 
 def _bootstrap_json_store() -> None:
     if not JSON_STORE_ENABLED:
@@ -213,6 +262,12 @@ def _persist_tenants() -> None:
 # Camera sync caching (prevents repeated discovery)
 _camera_sync_cache: Dict[str, float] = {}  # module -> last_sync_timestamp
 _CAMERA_SYNC_CACHE_TTL: float = 60.0  # Only re-sync every 60 seconds
+=======
+# Camera sync caching (prevents repeated discovery)
+_camera_sync_cache: Dict[str, float] = {}  # module -> last_sync_timestamp
+_CAMERA_SYNC_CACHE_TTL: float = 60.0  # Only re-sync every 60 seconds
+_missing_test_videos_logged: bool = False
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 # Zone definitions
 ZONE_TYPES = {
@@ -263,6 +318,49 @@ def _module_test_videos_dir(module: Optional[str]) -> str:
     return os.path.join(base_dir, normalized)
 
 
+<<<<<<< HEAD
+=======
+def _resolve_video_path(video_path: Optional[str]) -> Optional[str]:
+    """Resolve local video paths against common runtime locations."""
+    if not video_path:
+        return None
+
+    raw = str(video_path).strip()
+    if not raw:
+        return None
+
+    if raw.startswith(("rtsp://", "http://", "https://")):
+        return raw
+
+    if os.path.isabs(raw) and os.path.exists(raw):
+        return raw
+
+    backend_dir = os.path.abspath(os.path.dirname(__file__))
+    project_root = os.path.abspath(os.path.join(backend_dir, ".."))
+    test_videos_dir = _get_test_videos_dir()
+
+    candidates = [
+        os.path.abspath(raw),
+        os.path.abspath(os.path.join(backend_dir, raw)),
+        os.path.abspath(os.path.join(project_root, raw)),
+        os.path.abspath(os.path.join(test_videos_dir, raw)),
+        os.path.abspath(os.path.join(test_videos_dir, os.path.basename(raw))),
+    ]
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+
+    return None
+
+
+def _get_uploaded_videos_dir() -> str:
+    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "uploaded_videos"))
+    os.makedirs(upload_dir, exist_ok=True)
+    return upload_dir
+
+
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 def _normalize_camera_id_from_video(video_path: str) -> str:
     stem = Path(video_path).stem.lower().strip()
     cleaned = ''.join(ch if ch.isalnum() else '_' for ch in stem)
@@ -306,13 +404,23 @@ def _infer_zone_from_path(video_path: str, fallback_index: int) -> str:
 
 
 def discover_test_videos(module: Optional[str] = None) -> List[Dict]:
+<<<<<<< HEAD
+=======
+    global _missing_test_videos_logged
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     normalized_module = _normalize_module(module or selected_module)
     test_videos_dir = _get_test_videos_dir()
     module_dir = _module_test_videos_dir(normalized_module)
     videos: List[Dict] = []
     logging.info(f"[VIDEO_DISCOVERY] module={normalized_module} base_dir={test_videos_dir} module_dir={module_dir}")
     if not os.path.exists(test_videos_dir):
+<<<<<<< HEAD
         logging.warning(f"[VIDEO_DISCOVERY] test_videos base directory not found: {test_videos_dir}")
+=======
+        if not _missing_test_videos_logged:
+            logging.warning(f"[VIDEO_DISCOVERY] test_videos base directory not found: {test_videos_dir}")
+            _missing_test_videos_logged = True
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         return videos
 
     candidates: List[str] = []
@@ -349,6 +457,12 @@ def discover_test_videos(module: Optional[str] = None) -> List[Dict]:
 
 def sync_camera_configs_from_test_videos(module: Optional[str] = None, force: bool = False) -> None:
     """Sync camera configs from test videos. Uses caching to avoid repeated discovery."""
+<<<<<<< HEAD
+=======
+    if not AUTO_DISCOVER_TEST_VIDEOS:
+        return
+
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     normalized_module = _normalize_module(module or selected_module)
     
     # Check cache - skip sync if recently done (unless forced)
@@ -421,6 +535,7 @@ def health():
 
 
 # ============================================================================
+<<<<<<< HEAD
 # AUTHENTICATION (GOOGLE OAUTH)
 # ============================================================================
 @app.get("/auth/google/login")
@@ -478,6 +593,96 @@ async def auth_logout():
     response = JSONResponse({"success": True})
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
+=======
+# AUTHENTICATION ENDPOINTS
+# ============================================================================
+@app.get("/auth/google")
+async def google_auth_redirect():
+    """Redirect to Google OAuth consent screen."""
+    if not AUTH_ENABLED:
+        return JSONResponse({"error": "Auth is disabled"}, status_code=400)
+    auth_url = get_google_auth_url()
+    return JSONResponse({"auth_url": auth_url})
+
+
+@app.get("/auth/google/login")
+async def google_login_redirect():
+    """Direct redirect to Google OAuth (for browser navigation)."""
+    if not AUTH_ENABLED:
+        return JSONResponse({"error": "Auth is disabled"}, status_code=400)
+    from fastapi.responses import RedirectResponse
+    auth_url = get_google_auth_url()
+    return RedirectResponse(url=auth_url)
+
+
+@app.get("/auth/google/callback")
+async def google_auth_callback(code: str = None, error: str = None):
+    """Handle Google OAuth callback and issue JWT."""
+    from fastapi.responses import RedirectResponse
+    
+    if not AUTH_ENABLED:
+        return JSONResponse({"error": "Auth is disabled"}, status_code=400)
+    
+    if error:
+        return RedirectResponse(url=f"{FRONTEND_URL}?auth_error={error}")
+    
+    if not code:
+        return RedirectResponse(url=f"{FRONTEND_URL}?auth_error=no_code")
+    
+    try:
+        # Exchange code for tokens
+        tokens = await exchange_code_for_tokens(code)
+        access_token = tokens.get("access_token")
+        
+        if not access_token:
+            return RedirectResponse(url=f"{FRONTEND_URL}?auth_error=no_access_token")
+        
+        # Get user info from Google
+        google_user = await get_google_user_info(access_token)
+        
+        # Get or create user in our system
+        user = get_or_create_user(google_user)
+        
+        # Create JWT token
+        jwt_token = create_jwt_token(user)
+        
+        # Redirect to frontend with token
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}?token={jwt_token}&user={user.name}"
+        )
+    except Exception as e:
+        logging.error(f"OAuth callback error: {e}")
+        return RedirectResponse(url=f"{FRONTEND_URL}?auth_error=callback_failed")
+
+
+@app.get("/auth/me")
+async def get_me(user: User = Depends(require_auth)):
+    """Get current authenticated user info."""
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "picture": user.picture,
+        "role": user.role,
+    }
+
+
+@app.get("/auth/verify")
+async def verify_token(user: User = Depends(get_current_user)):
+    """Verify if current token is valid. Returns user if valid, null if not."""
+    if user:
+        return {
+            "valid": True,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "picture": user.picture,
+                "role": user.role,
+            }
+        }
+    return {"valid": False, "user": None}
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 
 # ============================================================================
@@ -514,6 +719,7 @@ async def set_current_module(data: dict):
     }
 
 
+<<<<<<< HEAD
 # ============================================================================
 # TENANT MANAGEMENT
 # ============================================================================
@@ -564,6 +770,8 @@ async def update_tenant(tenant_id: str, data: dict):
     return {"success": True, "tenant": tenant}
 
 
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 @app.get("/api/cameras")
 def get_cameras(request: Request):
     """Get all camera configurations."""
@@ -595,7 +803,10 @@ async def update_camera(camera_id: str, config: dict):
     
     camera_configs[camera_id].update(config)
     logging.info(f"Updated camera config: {camera_id} -> {camera_configs[camera_id]}")
+<<<<<<< HEAD
     _persist_cameras()
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     return {"success": True, "camera": camera_configs[camera_id]}
 
 
@@ -688,7 +899,10 @@ async def create_camera(data: dict):
     }
     
     camera_configs[camera_id] = camera_config
+<<<<<<< HEAD
     _persist_cameras()
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     
     logging.info(f"🎥 Created new camera: {camera_id} -> zone={zone}, video={os.path.basename(abs_path)}")
     
@@ -699,6 +913,42 @@ async def create_camera(data: dict):
     }
 
 
+<<<<<<< HEAD
+=======
+@app.post("/api/upload-video")
+async def upload_video(file: UploadFile = File(...)):
+    """Upload a local test video to backend storage and return its absolute path."""
+    if not file.filename:
+        return JSONResponse({"error": "Invalid file name"}, status_code=400)
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        return JSONResponse(
+            {"error": f"Unsupported video format: {ext}. Allowed: {sorted(ALLOWED_UPLOAD_EXTENSIONS)}"},
+            status_code=400,
+        )
+
+    upload_dir = _get_uploaded_videos_dir()
+    safe_stem = "".join(ch if ch.isalnum() else "_" for ch in Path(file.filename).stem).strip("_") or "video"
+    unique_name = f"{safe_stem}_{int(time.time() * 1000)}{ext}"
+    target_path = os.path.join(upload_dir, unique_name)
+
+    try:
+        content = await file.read()
+        with open(target_path, "wb") as out:
+            out.write(content)
+    except Exception as exc:
+        logging.error(f"Video upload failed: {exc}")
+        return JSONResponse({"error": "Failed to store uploaded video"}, status_code=500)
+
+    return {
+        "success": True,
+        "filename": unique_name,
+        "video_path": os.path.abspath(target_path),
+    }
+
+
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 def _get_zone_model(zone: str) -> str:
     """Get the model file for a zone."""
     zone_models = {
@@ -718,7 +968,10 @@ async def delete_camera(camera_id: str):
     
     config = camera_configs.pop(camera_id)
     logging.info(f"🗑️ Deleted camera: {camera_id}")
+<<<<<<< HEAD
     _persist_cameras()
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     
     # Clean up video capture if exists
     if camera_id in video_captures:
@@ -746,12 +999,17 @@ async def camera_health(camera_id: str):
     if camera_id in video_captures:
         cap = video_captures[camera_id]
         if cap is not None and cap.isOpened():
+<<<<<<< HEAD
             payload = {
+=======
+            return {
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
                 "status": "online",
                 "camera_id": camera_id,
                 "zone": config.get("zone"),
                 "active": config.get("active", True),
             }
+<<<<<<< HEAD
             if redis_client:
                 try:
                     redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
@@ -763,12 +1021,23 @@ async def camera_health(camera_id: str):
     video_path = config.get("source") or config.get("video_path")
     if video_path and os.path.exists(video_path):
         payload = {
+=======
+    
+    # Try to check if video source is accessible
+    video_path = config.get("video_path") or config.get("source")
+    if video_path in ("test_video", "rtsp"):
+        video_path = None
+    resolved_video_path = _resolve_video_path(video_path)
+    if resolved_video_path:
+        return {
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
             "status": "online",
             "camera_id": camera_id,
             "zone": config.get("zone"),
             "active": config.get("active", True),
             "source": "file",
         }
+<<<<<<< HEAD
         if redis_client:
             try:
                 redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
@@ -777,18 +1046,25 @@ async def camera_health(camera_id: str):
         return payload
     
     payload = {
+=======
+    
+    return {
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         "status": "offline",
         "camera_id": camera_id,
         "zone": config.get("zone"),
         "active": config.get("active", True),
         "reason": "No video source found",
     }
+<<<<<<< HEAD
     if redis_client:
         try:
             redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
         except Exception as exc:
             logging.warning(f"Redis health update failed: {exc}")
     return payload
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 
 @app.get("/api/system/health")
@@ -851,11 +1127,24 @@ def get_video_capture(camera_id: str) -> Optional[cv2.VideoCapture]:
     video_path = config.get("video_path", "")
     
     # Try configured video path
+<<<<<<< HEAD
     if video_path and os.path.exists(video_path):
         cap = cv2.VideoCapture(video_path)
         if cap.isOpened():
             return cap
     
+=======
+    resolved_video_path = _resolve_video_path(video_path)
+    if resolved_video_path:
+        cap = cv2.VideoCapture(resolved_video_path)
+        if cap.isOpened():
+            return cap
+    
+    # Try test_videos folder based on zone (only when auto-discovery is enabled)
+    if not AUTO_DISCOVER_TEST_VIDEOS:
+        return None
+
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     # Try test_videos folder based on zone
     zone = config.get("zone", "")
     test_videos_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../test_videos'))
@@ -1016,12 +1305,15 @@ async def receive_event(event: dict, request: Request = None):
         f"event_id={event_id} camera={camera_id} zone={zone} detected_by_zone={detected_by_zone} "
         f"event_type={event_type} confidence={confidence:.2f} boxes={boxes_count} ts={timestamp}"
     )
+<<<<<<< HEAD
 
     if redis_client:
         try:
             redis_client.publish("events", json.dumps(event))
         except Exception as exc:
             logging.warning(f"Redis publish failed: {exc}")
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     
     result = process_event(event)
     suspicion_score = float(result.get("suspicion_score", 0.0) or 0.0)
@@ -1035,6 +1327,7 @@ async def receive_event(event: dict, request: Request = None):
         incidents[incident_id] = {"event": event, "alert": alert}
         alerts_history.append({"event": event, "alert": alert})
 
+<<<<<<< HEAD
         if JSON_STORE_ENABLED:
             append_incident({
                 "incident_id": incident_id,
@@ -1043,6 +1336,8 @@ async def receive_event(event: dict, request: Request = None):
                 "created_at": time.time(),
             })
 
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         logging.warning(
             "[EVENT_INCIDENT_DETECTED] "
             f"event_id={event_id} type={event_type} camera={camera_id} zone={zone} "
@@ -1057,12 +1352,15 @@ async def receive_event(event: dict, request: Request = None):
             f"[BROADCAST_QUEUED] event_id={event_id} type={event_type} "
             f"queue_size={alert_broadcast_queue.qsize()}"
         )
+<<<<<<< HEAD
 
         if redis_client:
             try:
                 redis_client.publish("alerts", json.dumps({"event": event, "alert": alert}))
             except Exception as exc:
                 logging.warning(f"Redis publish failed: {exc}")
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         return {"received": True, "alert": alert, "incident_id": incident_id}
 
     logging.debug(
@@ -1211,6 +1509,7 @@ def list_incidents():
         "by_zone": by_zone,
     }
 
+<<<<<<< HEAD
 
 @app.delete("/incidents")
 def clear_incidents():
@@ -1220,6 +1519,8 @@ def clear_incidents():
         save_incidents([])
     return {"success": True, "cleared": True}
 
+=======
+>>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 @app.get("/incident/{incident_id}/summary")
 async def get_llm_summary(incident_id: str):
