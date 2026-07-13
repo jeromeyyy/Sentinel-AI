@@ -1,6 +1,4 @@
-// ─── API Configuration ───────────────────────────────────────────────────────
-// For local development, uncomment: const BACKEND_URL = 'http://localhost:8000';
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+import { BACKEND_URL } from '@/lib/constants';
 
 export default function CameraFeed() {
   return (

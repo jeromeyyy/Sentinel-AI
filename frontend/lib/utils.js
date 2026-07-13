@@ -1,8 +1,11 @@
 import { format, formatDistanceToNow } from 'date-fns';
 
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
 // ─── Class Name Utilities ────────────────────────────────────────────────────
-export function cn(...classes) {
-  return classes.filter(Boolean).join(' ');
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
 }
 
 // ─── Date Formatting ─────────────────────────────────────────────────────────
@@ -61,4 +64,17 @@ export function formatNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
   return num?.toString() || '0';
+}
+
+// ─── API Fetch Helper (with ngrok support) ───────────────────────────────────
+/**
+ * Wrapper around fetch that adds ngrok-skip-browser-warning header
+ * Use this for all backend API calls when using ngrok
+ */
+export function fetchBackend(url, options = {}) {
+  const headers = {
+    'ngrok-skip-browser-warning': 'true',
+    ...options.headers,
+  };
+  return fetch(url, { ...options, headers });
 }

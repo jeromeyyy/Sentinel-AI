@@ -18,6 +18,11 @@ import {
   Car,
   Users,
   BookOpen,
+  Flame,
+  Server,
+  DoorOpen,
+  SquareParking,
+  Landmark,
   Shield,
   Wifi,
   Settings,
@@ -30,7 +35,8 @@ import { Badge } from './ui/Badge';
 import { Input, Select } from './ui/Input';
 import { StatusIndicator } from './ui/StatusIndicator';
 
-import { BACKEND_URL, ZONES } from '../lib/constants';
+import { BACKEND_URL, ZONES, getZonesForModule } from '@/lib/constants';
+import { fetchBackend } from '@/lib/utils';
 import { cn } from '../lib/utils';
 
 // Zone icons mapping
@@ -39,6 +45,14 @@ const ZONE_ICONS = {
   corridor: Users,
   school_ground: MapPin,
   classroom: BookOpen,
+  workspace: Flame,
+  hallway: Flame,
+  meeting_hall: Landmark,
+  server_room: Server,
+  door: DoorOpen,
+  parking: SquareParking,
+  main_gate: Car,
+  living_room: Flame,
 };
 
 // Zone colors mapping
@@ -47,6 +61,14 @@ const ZONE_COLORS = {
   corridor: 'green',
   school_ground: 'orange',
   classroom: 'cyan',
+  workspace: 'orange',
+  hallway: 'orange',
+  meeting_hall: 'orange',
+  server_room: 'green',
+  door: 'green',
+  parking: 'orange',
+  main_gate: 'blue',
+  living_room: 'orange',
 };
 
 const WIZARD_STEPS = [
@@ -56,14 +78,16 @@ const WIZARD_STEPS = [
   { id: 'confirm', title: 'Review & Save', description: 'Confirm configuration', icon: Shield },
 ];
 
-export default function SetupWizard({ isOpen, onClose, onComplete, existingCamera = null }) {
+export default function SetupWizard({ isOpen, onClose, onComplete, existingCamera = null, selectedModule = 'school' }) {
   const fileInputRef = useRef(null);
+  const availableZones = getZonesForModule(selectedModule);
+  const defaultZoneId = availableZones[0]?.id || 'outgate';
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
     name: '',
     source: '',
     sourceType: 'test_video', // 'test_video', 'rtsp', 'file'
-    zone: 'outgate',
+    zone: defaultZoneId,
   });
   const [previewStatus, setPreviewStatus] = useState('idle'); // 'idle', 'loading', 'success', 'error'
   const [previewError, setPreviewError] = useState('');
@@ -79,14 +103,14 @@ export default function SetupWizard({ isOpen, onClose, onComplete, existingCamer
         name: existingCamera.name || '',
         source: existingCamera.video_path || existingCamera.rtsp_url || '',
         sourceType: existingCamera.rtsp_url ? 'rtsp' : 'test_video',
-        zone: existingCamera.zone || 'outgate',
+        zone: existingCamera.zone || defaultZoneId,
       });
     } else {
       setFormData({
         name: '',
         source: '',
         sourceType: 'test_video',
-        zone: 'outgate',
+        zone: defaultZoneId,
       });
     }
     setCurrentStep(0);
@@ -95,7 +119,13 @@ export default function SetupWizard({ isOpen, onClose, onComplete, existingCamer
     setSelectedVideoName('');
     setSelectedVideoFile(null);
     setLocalPreviewUrl('');
-  }, [existingCamera, isOpen]);
+  }, [existingCamera, isOpen, defaultZoneId]);
+
+  useEffect(() => {
+    if (!availableZones.some(z => z.id === formData.zone)) {
+      setFormData(prev => ({ ...prev, zone: defaultZoneId }));
+    }
+  }, [availableZones, formData.zone, defaultZoneId]);
 
   useEffect(() => {
     return () => {
@@ -134,7 +164,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, existingCamer
       case 0: // Camera Info
         return formData.name.trim().length > 0;
       case 1: // Zone
-        return formData.zone && ZONES.some(z => z.id === formData.zone);
+        return formData.zone && availableZones.some(z => z.id === formData.zone);
       case 2: // Preview
         return previewStatus === 'success' || previewStatus === 'idle';
       case 3: // Confirm
@@ -216,7 +246,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, existingCamer
           const uploadForm = new FormData();
           uploadForm.append('file', selectedVideoFile);
 
-          const uploadRes = await fetch(`${backendBaseUrl}/api/upload-video`, {
+          const uploadRes = await fetchBackend(`${backendBaseUrl}/api/upload-video`, {
             method: 'POST',
             body: uploadForm,
           });
@@ -234,7 +264,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, existingCamer
         }
       }
 
-      const res = await fetch(`${BACKEND_URL}/api/camera/${cameraId}`, {
+      const res = await fetchBackend(`${BACKEND_URL}/api/camera/${cameraId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cameraData),
@@ -539,7 +569,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, existingCamer
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {ZONES.filter(z => z.id !== 'all').map((zone) => {
+                  {availableZones.map((zone) => {
                     const isSelected = formData.zone === zone.id;
                     const ZoneIcon = ZONE_ICONS[zone.id] || MapPin;
                     const zoneColor = ZONE_COLORS[zone.id] || 'blue';

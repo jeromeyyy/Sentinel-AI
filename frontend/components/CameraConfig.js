@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-
-// ─── API Configuration ───────────────────────────────────────────────────────
-// For local development, uncomment: const BACKEND_URL = 'http://localhost:8000';
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+import { BACKEND_URL } from '@/lib/constants';
+import { fetchBackend } from '@/lib/utils';
 
 const ZONE_TYPES = {
   all: {
@@ -75,7 +73,7 @@ export default function CameraConfig({ camera, onSave, onDelete }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/camera/${config.id}`, {
+      const response = await fetchBackend(`${BACKEND_URL}/api/camera/${config.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),

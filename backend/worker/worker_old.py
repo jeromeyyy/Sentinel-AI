@@ -6,12 +6,14 @@ import redis
 import base64
 import logging
 import requests
+from pathlib import Path
 from dotenv import load_dotenv
 from collections import deque
 from typing import Dict, List, Tuple, Optional
 
-# Load .env
-load_dotenv()
+# Load environment variables from centralized .env in project root
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
 
 # Config
 FRAME_FPS = int(os.getenv("FRAME_FPS", 5))

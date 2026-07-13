@@ -6,6 +6,9 @@ Stateful, cross-frame behavior analysis that runs OUTSIDE zone processors:
 - AfterHoursChecker : Escalates / flags events outside school schedule.
                       Also generates after_hours_intrusion events for
                       any person detected outside configured hours.
+                      
+                      NOTE: After-hours is now strictly >= 23:00 IST (11 PM),
+                      NOT based on school hours (07:30-17:00).
 
 - LoiteringTracker  : Tracks how long each person has been stationary
                       (utility — zone processors can instantiate this).
@@ -18,12 +21,25 @@ from datetime import datetime, time as dtime
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 
+# IST timezone support
+try:
+    import pytz
+    IST = pytz.timezone('Asia/Kolkata')
+    PYTZ_AVAILABLE = True
+except ImportError:
+    IST = None
+    PYTZ_AVAILABLE = False
+    logging.warning("pytz not available - after-hours check will use local time")
+
 # ============================================================================
 # SCHEDULE CONFIGURATION
 # ============================================================================
 
-# Default school hours — override via env or config.yaml
-# Format: "HH:MM"
+# After-hours intrusion starts at 23:00 IST (11 PM) - NOT school hours!
+# This is strictly enforced: current_IST_hour >= 23
+AFTER_HOURS_START_HOUR = int(os.getenv("AFTER_HOURS_START_HOUR", "23"))
+
+# DEPRECATED: School hours config (kept for backward compatibility but NOT used for intrusion)
 DEFAULT_SCHOOL_START = os.getenv("SCHOOL_HOURS_START", "07:30")
 DEFAULT_SCHOOL_END   = os.getenv("SCHOOL_HOURS_END",   "17:00")
 
@@ -51,6 +67,9 @@ class AfterHoursChecker:
     3. Injects after_hours_intrusion events for person detections
        outside operating hours in restricted zones
 
+    IMPORTANT: After-hours is defined as >= 23:00 IST (11 PM), NOT school hours.
+               This is strictly enforced across all zones.
+    
     Called by worker.py AFTER zone processors run, before backend send.
     """
 
@@ -59,10 +78,12 @@ class AfterHoursChecker:
         school_start: str = DEFAULT_SCHOOL_START,
         school_end:   str = DEFAULT_SCHOOL_END,
     ):
+        # Keep school hours for backward compatibility but NOT used for intrusion detection
         self._start = self._parse_time(school_start)
         self._end   = self._parse_time(school_end)
+        self._after_hours_start = AFTER_HOURS_START_HOUR  # 23:00 IST (11 PM)
         logging.info(
-            f"AfterHoursChecker: school hours {school_start}–{school_end}"
+            f"AfterHoursChecker: intrusion detection starts at {self._after_hours_start}:00 IST (NOT school hours)"
         )
 
     @staticmethod
@@ -71,9 +92,27 @@ class AfterHoursChecker:
         return dtime(int(h), int(m))
 
     def is_after_hours(self, ts: Optional[float] = None) -> bool:
-        """Return True if the given timestamp (or now) is outside school hours."""
-        now = datetime.fromtimestamp(ts).time() if ts else datetime.now().time()
-        return not (self._start <= now <= self._end)
+        """
+        Return True if the given timestamp (or now) is >= 23:00 IST.
+        
+        STRICTLY enforces: current_IST_hour >= 23 (11 PM IST)
+        Does NOT use school hours (07:30-17:00).
+        """
+        if PYTZ_AVAILABLE:
+            # Use IST timezone
+            if ts:
+                current_time_ist = datetime.fromtimestamp(ts, tz=IST)
+            else:
+                current_time_ist = datetime.now(IST)
+            current_hour = current_time_ist.hour
+        else:
+            # Fallback to local time if pytz not available
+            now = datetime.fromtimestamp(ts) if ts else datetime.now()
+            current_hour = now.hour
+        
+        # Strictly enforce: after-hours = current hour >= 23 (11 PM)
+        is_after = current_hour >= self._after_hours_start
+        return is_after
 
     def filter(
         self,

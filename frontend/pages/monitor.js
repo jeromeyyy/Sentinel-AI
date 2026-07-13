@@ -28,17 +28,13 @@ import { SkeletonCameraGrid, SkeletonTable } from '../components/ui/Skeleton';
 import { NoIncidents, NoAlerts, NoCameras, NoSearchResults } from '../components/ui/EmptyState';
 
 import { useWebSocket } from '../hooks/useWebSocket';
-import { BACKEND_URL, ZONES, PRIORITY_COLORS, EVENT_LABELS } from '../lib/constants';
-import { cn, formatTimestamp, formatRelativeTime, formatEventType, getAlertKey, getCameraId, getEventType } from '../lib/utils';
+import { BACKEND_URL, ZONES, PRIORITY_COLORS, EVENT_LABELS } from '@/lib/constants';
+import { cn, formatTimestamp, formatRelativeTime, formatEventType, getAlertKey, getCameraId, getEventType, fetchBackend } from '../lib/utils';
 
 // Import chart components
 import AnalyticsCharts from '../components/AnalyticsCharts';
 import AlertPopupNew from '../components/AlertPopupNew';
 import IncidentTimeline from '../components/IncidentTimeline';
-<<<<<<< HEAD
-import SettingsPanel from '../components/SettingsPanel';
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 const TAB_TITLES = {
   monitoring: { title: 'Live Monitoring', subtitle: 'Real-time surveillance and threat detection' },
@@ -90,9 +86,9 @@ export default function MonitorPage() {
       setLoading(true);
       try {
         const [camerasRes, statsRes, incidentsRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/api/cameras`),
-          fetch(`${BACKEND_URL}/api/stats`),
-          fetch(`${BACKEND_URL}/incidents`),
+          fetchBackend(`${BACKEND_URL}/api/cameras`),
+          fetchBackend(`${BACKEND_URL}/api/stats`),
+          fetchBackend(`${BACKEND_URL}/incidents`),
         ]);
 
         if (camerasRes.ok) {
@@ -135,7 +131,7 @@ export default function MonitorPage() {
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/stats`);
+        const res = await fetchBackend(`${BACKEND_URL}/api/stats`);
         if (res.ok) {
           const data = await res.json();
           setStats(data);
@@ -218,24 +214,10 @@ export default function MonitorPage() {
         )}
 
         {activeTab === 'settings' && (
-<<<<<<< HEAD
-          <motion.div
-            key="settings"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-          >
-            <SettingsPanel
-              cameras={cameras}
-              incidents={incidents}
-            />
-          </motion.div>
-=======
           <SettingsView
             key="settings"
             wsStatus={wsStatus}
           />
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         )}
       </AnimatePresence>
     </DashboardLayout>
@@ -290,16 +272,16 @@ function MonitoringView({
       {/* Right Panel - Alerts & Quick Analytics */}
       <div className="space-y-6">
         {/* Active Alerts Panel */}
-        <Card>
-          <CardHeader>
+        <Card className="overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-gradient-to-r from-red-500/10 via-transparent to-transparent">
             <CardTitle icon={<span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}>
               Active Alerts
             </CardTitle>
-            <Badge variant="outline" size="sm">
+            <Badge variant={Object.keys(alerts).length > 0 ? 'destructive' : 'outline'} size="sm">
               {Object.keys(alerts).length} live
             </Badge>
-          </CardHeader>
-          <CardContent className="max-h-[50vh] overflow-y-auto">
+          </div>
+          <CardContent className="max-h-[50vh] overflow-y-auto p-4">
             {Object.keys(alerts).length > 0 ? (
               <div className="space-y-3">
                 {Object.entries(alerts).map(([cameraId, alert]) => (
@@ -324,6 +306,7 @@ function MonitoringView({
             icon={<Camera className="w-5 h-5" />}
             color="blue"
             size="sm"
+            className="bg-gradient-to-br from-blue-500/10 via-transparent to-transparent"
           />
           <StatBox
             label="Incidents Today"
@@ -331,25 +314,27 @@ function MonitoringView({
             icon={<AlertTriangle className="w-5 h-5" />}
             color="orange"
             size="sm"
+            className="bg-gradient-to-br from-orange-500/10 via-transparent to-transparent"
           />
         </div>
 
         {/* Mini Analytics */}
         {analytics && (
-          <Card>
-            <CardHeader>
-              <CardTitle icon={<Activity className="w-4 h-4" />}>
+          <Card className="overflow-hidden">
+            <CardHeader className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-transparent" />
+              <CardTitle icon={<Activity className="w-4 h-4 text-purple-400" />} className="relative">
                 Quick Stats
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {Object.entries(analytics.by_type || {}).slice(0, 4).map(([type, count]) => (
-                  <div key={type} className="flex items-center justify-between">
+                  <div key={type} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
                     <span className="text-sm text-muted-foreground">
                       {formatEventType(type)}
                     </span>
-                    <Badge variant="outline" size="sm">{count}</Badge>
+                    <Badge variant="outline" size="sm" className="border-purple-500/30 text-purple-400">{count}</Badge>
                   </div>
                 ))}
               </div>
@@ -510,7 +495,19 @@ function CamerasView({ cameras, loading, expandedCamera, setExpandedCamera }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
+      className="space-y-6"
     >
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+          <Camera className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Camera Management</h2>
+          <p className="text-sm text-muted-foreground">{cameras.length} cameras configured</p>
+        </div>
+      </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {cameras.map((camera) => {
           const zone = ZONES.find(z => z.id === camera.zone);
@@ -572,13 +569,24 @@ function IncidentsView({ incidents, loading, markResolved }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
+      className="space-y-6"
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>Incident Timeline</CardTitle>
-          <Badge variant="outline">{incidents.length} total</Badge>
-        </CardHeader>
-        <CardContent>
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/25">
+          <AlertTriangle className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Incident Timeline</h2>
+          <p className="text-sm text-muted-foreground">Review and manage security events</p>
+        </div>
+        <div className="ml-auto">
+          <Badge variant="outline" className="text-base px-4 py-2">{incidents.length} Total</Badge>
+        </div>
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
           <IncidentTimeline 
             incidents={incidents} 
             onResolve={markResolved}
@@ -606,7 +614,19 @@ function AnalyticsView({ analytics, incidents, loading }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
+      className="space-y-6"
     >
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-2">
+        <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/25">
+          <Activity className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Analytics Dashboard</h2>
+          <p className="text-sm text-muted-foreground">Insights and performance metrics</p>
+        </div>
+      </div>
+
       <AnalyticsCharts 
         analytics={analytics} 
         incidents={incidents}
@@ -615,9 +635,6 @@ function AnalyticsView({ analytics, incidents, loading }) {
   );
 }
 
-<<<<<<< HEAD
-// Settings view now uses SettingsPanel component
-=======
 // ─── Settings View ───────────────────────────────────────────────────────────
 function SettingsView({ wsStatus }) {
   return (
@@ -625,49 +642,132 @@ function SettingsView({ wsStatus }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="max-w-2xl"
+      className="max-w-3xl space-y-6"
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>System Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">System Settings</h2>
+          <p className="text-sm text-muted-foreground">Configure your security monitoring system</p>
+        </div>
+      </div>
+
+      {/* Connection Status Card */}
+      <Card className="overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-green-500/10 via-transparent to-transparent border-b border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center">
+                <Activity className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Connection Status</h3>
+                <p className="text-sm text-muted-foreground">Real-time system connectivity</p>
+              </div>
+            </div>
+            <StatusIndicator status={wsStatus} size="lg" glow />
+          </div>
+        </div>
+        <CardContent className="p-0 divide-y divide-border">
           <SettingRow
-            label="Backend URL"
-            description="API endpoint for data"
-            value={<code className="text-xs bg-muted px-2 py-1 rounded">{BACKEND_URL}</code>}
+            icon={<Activity className="w-4 h-4" />}
+            label="WebSocket"
+            description="Live event streaming"
+            value={<Badge variant={wsStatus === 'connected' ? 'online' : 'offline'} size="sm" dot>{wsStatus}</Badge>}
           />
           <SettingRow
-            label="WebSocket Status"
-            description="Real-time connection"
-            value={<StatusIndicator status={wsStatus} />}
-          />
-          <SettingRow
-            label="Refresh Rate"
-            description="Data polling interval"
-            value={<span className="text-sm text-muted-foreground">10 seconds</span>}
-          />
-          <SettingRow
-            label="Theme"
-            description="Appearance settings"
-            value={<span className="text-sm text-muted-foreground">System (Dark)</span>}
+            icon={<Clock className="w-4 h-4" />}
+            label="Polling Interval"
+            description="Stats refresh rate"
+            value={<Badge variant="outline" size="sm">10 seconds</Badge>}
           />
         </CardContent>
       </Card>
+
+      {/* API Configuration Card */}
+      <Card className="overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-blue-500/10 via-transparent to-transparent border-b border-border">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground">API Configuration</h3>
+              <p className="text-sm text-muted-foreground">Backend connection settings</p>
+            </div>
+          </div>
+        </div>
+        <CardContent className="p-0 divide-y divide-border">
+          <SettingRow
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" /></svg>}
+            label="Backend URL"
+            description="API endpoint for all requests"
+            value={<code className="text-xs bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded-lg font-mono">{BACKEND_URL}</code>}
+          />
+          <SettingRow
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
+            label="Version"
+            description="Current system version"
+            value={<Badge variant="outline" size="sm">v1.0.0</Badge>}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Theme Card */}
+      <Card className="overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-purple-500/10 via-transparent to-transparent border-b border-border">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground">Appearance</h3>
+              <p className="text-sm text-muted-foreground">Customize the look and feel</p>
+            </div>
+          </div>
+        </div>
+        <CardContent className="p-0 divide-y divide-border">
+          <SettingRow
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>}
+            label="Theme"
+            description="Interface color scheme"
+            value={<Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20" size="sm">Dark Mode</Badge>}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Footer */}
+      <div className="text-center pt-6">
+        <p className="text-xs text-muted-foreground">
+          SentinelAI School Safety System — Powered by YOLOv8
+        </p>
+      </div>
     </motion.div>
   );
 }
 
-function SettingRow({ label, description, value }) {
+function SettingRow({ icon, label, description, value }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
-      <div>
-        <div className="text-sm font-medium text-foreground">{label}</div>
-        <div className="text-xs text-muted-foreground">{description}</div>
+    <div className="flex items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors">
+      <div className="flex items-center gap-4">
+        {icon && <span className="text-muted-foreground">{icon}</span>}
+        <div>
+          <div className="text-sm font-medium text-foreground">{label}</div>
+          <div className="text-xs text-muted-foreground">{description}</div>
+        </div>
       </div>
       {value}
     </div>
   );
 }
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 

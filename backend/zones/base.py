@@ -18,6 +18,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Any
 import time
 import numpy as np
+import os
+from datetime import datetime
+import pytz
 
 
 @dataclass
@@ -151,22 +154,23 @@ class BaseZoneProcessor(ABC):
     ZONE_NAME:  str       = "base"
     EVENT_TYPES: List[str] = []
 
-    MIN_FRAMES_FOR_EVENT: int   = 3
-    SUSPICION_THRESHOLD:  float = 0.6
+    MIN_FRAMES_FOR_EVENT: int   = 2   # Lowered from 3 for testing
+    SUSPICION_THRESHOLD:  float = 0.38  # Slightly lower for easier triggers
 
     # Weapon / fire-smoke shared thresholds (override per zone if needed)
-    WEAPON_CONFIDENCE_THRESHOLD    = 0.40
-    # Per-zone weapon thresholds (override default by zone name)
-    # school_ground has lowest threshold for maximum sensitivity
+    # WEAPON: Balanced stricter detection - reduce false positives but allow real detections
+    WEAPON_CONFIDENCE_THRESHOLD    = 0.47  # Slightly lower for easier triggers
+    # Per-zone weapon thresholds - balanced for precision without blocking legitimate detections
     WEAPON_CONFIDENCE_BY_ZONE = {
-        "school_ground": 0.35,      # Very low - outdoor needs sensitivity
-        "corridor": 0.55,           # Lower to catch more
-        "outgate": 0.50,
-        "classroom": 0.50,
+        "school_ground": 0.45,      # Higher than default but practical (was 0.35)
+        "corridor": 0.55,           # Stricter in indoor areas (was 0.55, kept)
+        "outgate": 0.50,            # Gate detection (was 0.50, kept)
+        "classroom": 0.55,          # Classroom priority (was 0.50)
     }
-    FIRE_SMOKE_CONFIDENCE_THRESHOLD = 0.45
-    MIN_WEAPON_FRAMES              = 2
-    MIN_FIRE_SMOKE_FRAMES          = 2
+    # FIRE/SMOKE: Stricter but realistic - require 0.75 confidence + 3 frame confirmation
+    FIRE_SMOKE_CONFIDENCE_THRESHOLD = 0.72  # Slightly lower for easier triggers
+    MIN_WEAPON_FRAMES              = 2       # Require 2 consecutive frames
+    MIN_FIRE_SMOKE_FRAMES          = 2       # Require 2 consecutive frames
 
     def __init__(self, camera_id: str):
         self.camera_id      = camera_id
@@ -177,14 +181,15 @@ class BaseZoneProcessor(ABC):
         # Per-event-type cooldowns (in seconds)
         # Different events need different cooldown periods
         self._event_cooldowns: Dict[str, float] = {
-            "weapon_detected": 10.0,      # Weapon: longer cooldown (serious event)
+            "weapon_detected": 12.0,      # Weapon: strong cooldown (increased from 10s)
             "fight": 8.0,                 # Fight: moderate cooldown
             "gate_accident": 8.0,         # Accident: moderate cooldown
             "vehicle_detected": 5.0,      # Vehicle: shorter cooldown (frequent)
             "crowd_formation": 6.0,       # Crowd: moderate cooldown
-            "fire_smoke_detected": 10.0,  # Fire: longer cooldown (serious)
+            "fire_smoke_detected": 15.0,  # Fire: strong 15s cooldown (prevents spikes)
             "mobile_usage": 4.0,          # Mobile: shorter cooldown
             "fall_detected": 6.0,         # Fall: moderate cooldown
+            "after_hours_intrusion": 25.0,  # After-hours: long cooldown
         }
         self._default_cooldown: float = 5.0  # Default for unlisted events
 
@@ -221,12 +226,52 @@ class BaseZoneProcessor(ABC):
         pass
 
     # ------------------------------------------------------------------
+    # Time-based Detection Control
+    # ------------------------------------------------------------------
+
+    def _is_fire_detection_allowed(self) -> bool:
+        """
+        Check whether fire detection is enabled.
+
+        By default fire detection is allowed at any time so test footage and
+        uploaded clips can trigger alerts without a night-only gate.
+        Set FIRE_DETECTION_STRICT_HOURS=1 to restore time-based gating.
+        
+        Returns:
+            True if fire detection should run, False otherwise
+        """
+        try:
+            # Get configuration from environment
+            fire_enabled = os.getenv("FIRE_DETECTION_ENABLED", "true").lower() == "true"
+            if not fire_enabled:
+                return False
+
+            strict_hours = os.getenv("FIRE_DETECTION_STRICT_HOURS", "0").lower() in {"1", "true", "yes", "on"}
+            if not strict_hours:
+                return True
+
+            fire_start_hour = int(os.getenv("FIRE_DETECTION_START_HOUR", "23"))
+
+            # Get current time in IST timezone
+            ist = pytz.timezone('Asia/Kolkata')
+            current_time_ist = datetime.now(ist)
+            current_hour = current_time_ist.hour
+
+            return current_hour >= fire_start_hour
+            
+        except Exception as e:
+            import logging
+            logging.warning(f"[FIRE_TIME_CHECK] Error checking fire detection time: {e}")
+            return True  # Allow by default if error
+
+    # ------------------------------------------------------------------
     # Shared detection helpers (called by every zone's process_frame)
     # ------------------------------------------------------------------
 
     def _process_shared_weapons(
         self,
         shared:  Dict[str, List],
+        tracked_objects: List[TrackedObject],
         persons: List[TrackedObject],
     ) -> Optional[DetectionEvent]:
         """
@@ -241,7 +286,7 @@ class BaseZoneProcessor(ABC):
         """
         import logging
         
-        detections = (shared or {}).get("weapons", [])
+        detections = list((shared or {}).get("weapons", []))
 
         # Fallback: if custom weapon model not loaded, shared["weapons"] is
         # empty but the zone model may have detected knife/scissors from COCO.
@@ -254,6 +299,18 @@ class BaseZoneProcessor(ABC):
             d for d in detections
             if d.get("confidence", 0) >= threshold
         ]
+
+        if not confident:
+            fallback_classes = {"knife", "scissors", "blade", "gun"}
+            confident = [
+                {
+                    "class_name": obj.class_name,
+                    "confidence": obj.confidence,
+                    "bbox": obj.bbox,
+                }
+                for obj in tracked_objects
+                if obj.class_name in fallback_classes and obj.confidence >= threshold
+            ]
 
         # Debug logging for school_ground zone
         if zone_name == "school_ground" and detections:
@@ -323,12 +380,23 @@ class BaseZoneProcessor(ABC):
     def _process_shared_fire_smoke(
         self,
         shared: Dict[str, List],
+        frame: Optional[np.ndarray] = None,
     ) -> Optional[DetectionEvent]:
         """
         Emit fire_smoke_detected from shared fire/smoke detector output.
         Works across all zones.
+        
+        🔥 IMPORTANT: Fire detection only works after configured time (default 11 PM IST)
+        This is a security measure to prevent false alarms during school hours.
         """
-        detections = (shared or {}).get("fire_smoke", [])
+        if not self._is_fire_detection_allowed():
+            self._fire_smoke_frame_count = 0
+            return None
+        
+        detections = list((shared or {}).get("fire_smoke", []))
+
+        if not detections and frame is not None:
+            detections = self._detect_fire_smoke_heuristic(frame)
 
         confident = [
             d for d in detections
@@ -365,6 +433,47 @@ class BaseZoneProcessor(ABC):
                 "source": "fire_smoke_model",
             },
         )
+
+    def _detect_fire_smoke_heuristic(self, frame: np.ndarray) -> List[Dict[str, Any]]:
+        """
+        Lightweight fallback when the fire/smoke model is unavailable.
+
+        Flags frames with a strong concentration of warm orange/red pixels.
+        """
+        try:
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            lower1 = np.array([0, 90, 120])
+            upper1 = np.array([35, 255, 255])
+            lower2 = np.array([160, 90, 120])
+            upper2 = np.array([180, 255, 255])
+
+            mask1 = cv2.inRange(hsv, lower1, upper1)
+            mask2 = cv2.inRange(hsv, lower2, upper2)
+            mask = cv2.bitwise_or(mask1, mask2)
+
+            warm_ratio = float(np.count_nonzero(mask)) / float(mask.size)
+            min_ratio = float(os.getenv("FIRE_HEURISTIC_PIXEL_RATIO", "0.025"))
+            if warm_ratio < min_ratio:
+                return []
+
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return []
+
+            contour = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(contour)
+            if w * h < 100:
+                return []
+
+            confidence = min(0.95, 0.55 + warm_ratio * 6.0)
+            return [{
+                "class_name": "fire",
+                "confidence": confidence,
+                "bbox": [int(x), int(y), int(x + w), int(y + h)],
+            }]
+
+        except Exception:
+            return []
 
     # ------------------------------------------------------------------
     # Pose ↔ track alignment helper

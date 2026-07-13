@@ -38,19 +38,19 @@ class ClassroomProcessor(BaseZoneProcessor):
     MODEL_NAME = "yolov8m.pt"
 
     # ── Mobile detection ────────────────────────────────────────────────
-    PHONE_CONFIDENCE_THRESHOLD = 0.35
-    PHONE_PERSON_IOU_THRESHOLD = 0.03
-    MIN_DETECTION_DURATION     = 1.5   # seconds
+    PHONE_CONFIDENCE_THRESHOLD = 0.25   # Lowered from 0.35 for testing
+    PHONE_PERSON_IOU_THRESHOLD = 0.01   # Lowered from 0.03
+    MIN_DETECTION_DURATION     = 1.0    # Lowered from 1.5 seconds
 
     # ── Fight detection (pose-based) ─────────────────────────────────
     # Fallback (no pose model): bbox IoU heuristic
-    FIGHT_OVERLAP_THRESHOLD = 0.12
-    FIGHT_MOTION_THRESHOLD  = 35.0
-    MIN_FIGHT_FRAMES        = 3
+    FIGHT_OVERLAP_THRESHOLD = 0.06    # Lowered from 0.12
+    FIGHT_MOTION_THRESHOLD  = 25.0    # Lowered from 35.0
+    MIN_FIGHT_FRAMES        = 2       # Lowered from 3
 
     # Pose-based fight: wrist/elbow keypoint velocity + proximity
-    POSE_FIGHT_WRIST_SPEED_THRESHOLD = 25.0   # px/frame — rapid arm movement
-    POSE_FIGHT_PROXIMITY_THRESHOLD   = 120     # px — persons close together
+    POSE_FIGHT_WRIST_SPEED_THRESHOLD = 15.0   # Lowered from 25.0 px/frame
+    POSE_FIGHT_PROXIMITY_THRESHOLD   = 160    # Increased from 120 px
 
     def __init__(self, camera_id: str):
         super().__init__(camera_id)
@@ -81,11 +81,11 @@ class ClassroomProcessor(BaseZoneProcessor):
         events: List[DetectionEvent] = []
 
         # Priority order: weapon > fire/smoke > fight > mobile
-        weapon_event = self._process_shared_weapons(shared, persons)
+        weapon_event = self._process_shared_weapons(shared, tracked_objects, persons)
         if weapon_event:
             events.append(weapon_event)
 
-        fire_event = self._process_shared_fire_smoke(shared)
+        fire_event = self._process_shared_fire_smoke(shared, frame)
         if fire_event:
             events.append(fire_event)
 
@@ -109,13 +109,10 @@ class ClassroomProcessor(BaseZoneProcessor):
         phones:   List[TrackedObject],
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
-<<<<<<< HEAD
-=======
         # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
         if not self._can_emit_event("mobile_usage"):
             self._update_suspicion("mobile_usage", False)
             return None
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if not persons or not phones:
             self._mobile_start_time = None
@@ -194,14 +191,11 @@ class ClassroomProcessor(BaseZoneProcessor):
         1. Pose-based  (if pose model output available): wrist velocity + proximity
         2. BBox heuristic fallback: IoU overlap + motion intensity
         """
-<<<<<<< HEAD
-=======
         # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
         if not self._can_emit_event("fight"):
             self._update_suspicion("fight", False)
             return None
         
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         if len(persons) < 2:
             self._fight_frame_count = 0
             self._update_suspicion("fight", False)

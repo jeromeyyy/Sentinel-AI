@@ -40,8 +40,18 @@ import numpy as np
 import logging
 import requests
 import threading
+import json
+import hashlib
+from pathlib import Path
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Any
+
+# Redis support (optional - fails gracefully if unavailable)
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
 
 # Ensure backend root is on sys.path for package imports (zones, models)
 import sys
@@ -49,7 +59,9 @@ BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BACKEND_ROOT not in sys.path:
     sys.path.insert(0, BACKEND_ROOT)
 
-load_dotenv()
+# Load environment variables from centralized .env in project root
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 FRAME_FPS   = int(os.getenv("FRAME_FPS", 5))
@@ -57,11 +69,130 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000/event")
 TENANT_ID   = os.getenv("TENANT_ID",   "school1")
 CAMERA_ID   = os.getenv("CAMERA_ID",   "cam1")
 
+# Snapshots directory for event images
+SNAPSHOTS_DIR = _PROJECT_ROOT / "backend" / "snapshots"
+SNAPSHOTS_DIR.mkdir(exist_ok=True)
+
+# Redis configuration for caching and deduplication
+REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() == "true" and REDIS_AVAILABLE
+REDIS_URL     = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", "300"))  # 5 minutes default
+
 # Event flood protection config
 EVENT_COOLDOWN_SECONDS = float(os.getenv("EVENT_COOLDOWN_SECONDS", "10"))
 MAX_FPS_PER_CAMERA     = float(os.getenv("MAX_FPS_PER_CAMERA", "10"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+if REDIS_ENABLED:
+    logging.info(f"✅ Redis enabled: caching detections for {REDIS_CACHE_TTL}s via {REDIS_URL}")
+else:
+    logging.info("⚠️  Redis disabled or unavailable - using in-memory event cooldown only")
+
+
+# ============================================================================
+# REDIS CACHE SYSTEM (Distributed Detection State & Event Deduplication)
+# ============================================================================
+
+class RedisCache:
+    """Redis-backed cache for detected objects and event deduplication.
+    
+    Provides:
+    - Object detection caching (avoid re-processing same person/weapon)
+    - Event deduplication (prevent duplicate alerts)
+    - Cross-camera caching (future: person ID sharing between cameras)
+    - Graceful fallback if Redis unavailable
+    """
+    
+    def __init__(self, redis_url: str = REDIS_URL, ttl: int = REDIS_CACHE_TTL):
+        self.ttl = ttl
+        self.client = None
+        self.enabled = False
+        
+        if not REDIS_ENABLED:
+            logging.debug("Redis caching disabled in config")
+            return
+        
+        try:
+            self.client = redis.from_url(redis_url, decode_responses=True)
+            self.client.ping()
+            self.enabled = True
+            logging.info(f"✅ Redis cache initialized (TTL: {ttl}s)")
+        except Exception as e:
+            logging.warning(f"⚠️  Redis cache init failed ({type(e).__name__}: {e}) - falling back to in-memory")
+            self.client = None
+            self.enabled = False
+    
+    def cache_detection(self, camera_id: str, detection_type: str, key_id: str, data: Dict) -> bool:
+        """Cache detected object to avoid re-processing (e.g., same person ID)."""
+        if not self.enabled:
+            return False
+        
+        try:
+            cache_key = f"detect:{camera_id}:{detection_type}:{key_id}"
+            self.client.setex(cache_key, self.ttl, json.dumps(data))
+            return True
+        except Exception as e:
+            logging.debug(f"Redis cache write failed: {e}")
+            return False
+    
+    def get_cached_detection(self, camera_id: str, detection_type: str, key_id: str) -> Optional[Dict]:
+        """Check if object was recently detected to avoid duplicate processing."""
+        if not self.enabled:
+            return None
+        
+        try:
+            cache_key = f"detect:{camera_id}:{detection_type}:{key_id}"
+            data = self.client.get(cache_key)
+            return json.loads(data) if data else None
+        except Exception as e:
+            logging.debug(f"Redis cache read failed: {e}")
+            return None
+    
+    def mark_event_sent(self, camera_id: str, event_type: str, event_hash: str) -> bool:
+        """Mark event as sent to prevent duplicate alerts within cache TTL."""
+        if not self.enabled:
+            return False
+        
+        try:
+            event_key = f"event:{camera_id}:{event_type}:{event_hash}"
+            self.client.setex(event_key, self.ttl, "1")
+            return True
+        except Exception as e:
+            logging.debug(f"Redis event marking failed: {e}")
+            return False
+    
+    def is_event_duplicate(self, camera_id: str, event_type: str, event_hash: str) -> bool:
+        """Check if event was already sent (deduplication)."""
+        if not self.enabled:
+            return False
+        
+        try:
+            event_key = f"event:{camera_id}:{event_type}:{event_hash}"
+            exists = self.client.exists(event_key) > 0
+            if exists:
+                logging.debug(f"Event dedup hit: {event_key}")
+            return exists
+        except Exception as e:
+            logging.debug(f"Redis dedup check failed: {e}")
+            return False
+    
+    def clear_camera_cache(self, camera_id: str) -> int:
+        """Clear all cached detections for a camera on restart."""
+        if not self.enabled:
+            return 0
+        
+        try:
+            pattern = f"detect:{camera_id}:*"
+            keys = self.client.keys(pattern)
+            if keys:
+                count = self.client.delete(*keys)
+                logging.info(f"Cleared {count} cached detections for camera {camera_id}")
+                return count
+            return 0
+        except Exception as e:
+            logging.warning(f"Redis cache clear failed: {e}")
+            return 0
 
 
 # ============================================================================
@@ -70,14 +201,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 # Per-event-type cooldowns (used by EventCooldownManager)
 EVENT_TYPE_COOLDOWNS: Dict[str, float] = {
-    "weapon_detected": 10.0,      # Serious: longer cooldown
+    "weapon_detected": 12.0,      # Serious: strong cooldown (increased from 10s)
     "fight": 8.0,                 # Moderate
     "gate_accident": 8.0,         # Moderate
     "vehicle_detected": 5.0,      # Frequent: shorter cooldown
     "crowd_formation": 6.0,       # Moderate
-    "fire_smoke_detected": 10.0,  # Serious: longer cooldown
+    "fire_smoke_detected": 15.0,  # Fire: strong 15s cooldown (increased from 10s)
     "mobile_usage": 4.0,          # Quick: shorter cooldown
     "fall_detected": 6.0,         # Moderate
+    "after_hours_intrusion": 25.0,  # After-hours: long cooldown (new)
 }
 
 
@@ -185,7 +317,29 @@ ZONE_TYPES = {
     "classroom":    ["mobile_usage", "fight",                   # fight is NEW
                      "weapon_detected", "fire_smoke_detected",  # NEW
                      "after_hours_intrusion"],
+    "fire_only":    ["fire_smoke_detected"],
 }
+
+CUSTOM_ZONE_RUNTIME_MAP = {
+    "workspace": "fire_only",
+    "hallway": "fire_only",
+    "meeting_hall": "fire_only",
+    "living_room": "fire_only",
+    "server_room": "corridor",
+    "door": "corridor",
+    "parking": "school_ground",
+    "ground": "school_ground",
+    "main_gate": "outgate",
+}
+
+
+def _resolve_runtime_zone(zone: Optional[str]) -> str:
+    zone_clean = (zone or "corridor").strip().lower().replace(" ", "_")
+    if zone_clean in CUSTOM_ZONE_RUNTIME_MAP:
+        return CUSTOM_ZONE_RUNTIME_MAP[zone_clean]
+    if zone_clean in ZONE_TYPES or zone_clean == "all":
+        return zone_clean
+    return "corridor"
 
 # ── COCO class map ─────────────────────────────────────────────────────────────
 YOLO_CLASSES = {
@@ -467,8 +621,8 @@ class DetectionPipeline:
         if self._after_hours:
             zone_events = self._after_hours.filter(zone_events, self.zone)
 
-        # 6. Format events for backend
-        events = self._format_events(zone_events, timestamp)
+        # 6. Format events for backend (with snapshot saving)
+        events = self._format_events(zone_events, timestamp, frame)
 
         # 7. Re-ID enrichment — attach global_person_id where possible
         if self._reid_manager:
@@ -540,13 +694,25 @@ class DetectionPipeline:
         return tracked_objects
 
     def _format_events(
-        self, zone_events: List[DetectionEvent], timestamp: float
+        self, zone_events: List[DetectionEvent], timestamp: float, frame: np.ndarray
     ) -> List[Dict]:
-        """Format zone processor output into backend event schema."""
+        """Format zone processor output into backend event schema with snapshot saving."""
         events = []
         for event in zone_events:
+            event_id = f"evt_{event.event_type}_{int(timestamp * 1000)}"
+            
+            # Save snapshot for this event
+            snapshot_path = None
+            try:
+                snapshot_filename = f"{event_id}_{self.camera_id}.jpg"
+                snapshot_path = SNAPSHOTS_DIR / snapshot_filename
+                cv2.imwrite(str(snapshot_path), frame)
+                logging.debug(f"Saved snapshot: {snapshot_path}")
+            except Exception as e:
+                logging.error(f"Failed to save snapshot for {event_id}: {e}")
+            
             events.append({
-                "event_id":      f"evt_{event.event_type}_{int(timestamp * 1000)}",
+                "event_id":      event_id,
                 "tenant_id":     TENANT_ID,
                 "camera_id":     self.camera_id,
                 "zone":          self.zone,
@@ -556,6 +722,7 @@ class DetectionPipeline:
                 "bounding_boxes": event.bounding_boxes,
                 "severity_score": event.confidence,
                 "metadata":      event.metadata or {},
+                "snapshot_path": str(snapshot_path) if snapshot_path else None,
                 # These fields are populated later by re-id enrichment
                 "global_person_id": None,
                 "after_hours":      event.metadata.get("after_hours", False) if event.metadata else False,
@@ -709,7 +876,7 @@ def _process_frame_with_shared(self, frame: np.ndarray, shared: Dict) -> List[Di
     if self._after_hours:
         zone_events = self._after_hours.filter(zone_events, self.zone)
 
-    events = self._format_events(zone_events, timestamp)
+    events = self._format_events(zone_events, timestamp, frame)
 
     if self._reid_manager:
         events = self._reid_manager.enrich_events(events, tracked_objects, self.camera_id)
@@ -747,12 +914,12 @@ class CameraWorker:
         max_fps:      Optional[float] = None,
     ):
         self.camera_id    = camera_id
-        self.zone         = zone
+        self.zone         = _resolve_runtime_zone(zone)
         self.video_source = video_source
         self.show_preview = show_preview
         self.max_fps      = max_fps or MAX_FPS_PER_CAMERA
 
-        if zone.lower() == "all":
+        if self.zone.lower() == "all":
             self._pipeline    = MultiZonePipeline(camera_id)
             self._is_multizone = True
         else:
@@ -761,12 +928,15 @@ class CameraWorker:
             reid_mgr   = ReidManager()     if _REID_AVAILABLE     else None
             after_hrs  = AfterHoursChecker() if _BEHAVIORS_AVAILABLE else None
             self._pipeline = DetectionPipeline(
-                camera_id, zone,
+                camera_id, self.zone,
                 shared_detectors=shared,
                 reid_manager=reid_mgr,
                 after_hours=after_hrs,
             )
             self._is_multizone = False
+
+        # Initialize Redis cache for event deduplication and object caching
+        self._redis_cache = RedisCache(REDIS_URL, REDIS_CACHE_TTL)
 
         self._running       = False
         self._shutdown_flag = threading.Event()
@@ -888,11 +1058,31 @@ class CameraWorker:
                 continue
 
     def _send_event(self, event: Dict):
-        """Send event to backend via HTTP POST with detailed logging."""
+        """Send event to backend via HTTP POST with Redis deduplication.
+        
+        Uses Redis to:
+        - Prevent duplicate events (same type/camera/time window)
+        - Cache event data for quick lookup
+        - Gracefully falls back to in-memory if Redis unavailable
+        """
         event_type = event.get("event_type", "unknown")
         event_id = event.get("event_id", "null")
         confidence = event.get("confidence", 0.0)
         camera_id = event.get("camera_id", "unknown")
+        
+        # Create event hash for deduplication (type + confidence threshold)
+        event_hash = hashlib.md5(
+            f"{event_type}:{int(confidence*100)}".encode()
+        ).hexdigest()[:8]
+        
+        # Check Redis for recent duplicate event
+        if self._redis_cache.is_event_duplicate(camera_id, event_type, event_hash):
+            self._suppressed_count += 1
+            logging.debug(
+                f"[EVENT_DEDUP_REDIS] id={event_id} type={event_type} "
+                f"camera={camera_id} (suppressed via Redis)"
+            )
+            return
         
         logging.debug(
             f"[EVENT_EMIT] id={event_id} camera={camera_id} type={event_type} "
@@ -902,6 +1092,9 @@ class CameraWorker:
         try:
             resp = requests.post(BACKEND_URL, json=event, timeout=5)
             if resp.status_code == 200:
+                # Mark event as sent in Redis cache
+                self._redis_cache.mark_event_sent(camera_id, event_type, event_hash)
+                self._event_count += 1
                 logging.info(
                     f"✓ [EVENT_DELIVERY_OK] id={event_id} type={event_type} "
                     f"camera={camera_id} status=200"
@@ -940,6 +1133,7 @@ class CameraWorker:
             "corridor":     (0,   255, 255),
             "school_ground":(0,   255, 0),
             "classroom":    (255, 0,   255),
+            "fire_only":    (0,   128, 255),
         }
         # Colour-code by event severity
         severity_colors = {
@@ -1205,8 +1399,38 @@ def _fetch_backend_cameras(module: Optional[str] = None) -> List[Dict]:
 
 
 def _resolve_camera_source(camera: Dict) -> Optional[Any]:
-    if camera.get("video_path"):
-        return camera["video_path"]
+    video_path = camera.get("video_path")
+    if video_path:
+        if isinstance(video_path, str):
+            stripped = video_path.strip()
+            if stripped.startswith(("rtsp://", "http://", "https://")):
+                return stripped
+            if os.path.isabs(stripped) and os.path.exists(stripped):
+                return stripped
+
+            # Resolve relative/manual file names against likely roots.
+            worker_dir = os.path.dirname(__file__)
+            backend_dir = BACKEND_ROOT
+            project_root = os.path.abspath(os.path.join(BACKEND_ROOT, ".."))
+            test_videos_dir = os.path.join(backend_dir, "test_videos")
+
+            candidates = [
+                os.path.abspath(stripped),
+                os.path.abspath(os.path.join(worker_dir, stripped)),
+                os.path.abspath(os.path.join(backend_dir, stripped)),
+                os.path.abspath(os.path.join(project_root, stripped)),
+                os.path.abspath(os.path.join(test_videos_dir, stripped)),
+            ]
+
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    return candidate
+
+            logging.warning(
+                f"Camera {camera.get('id', 'unknown')}: video_path not found as file, using raw value: {stripped}"
+            )
+            return stripped
+        return video_path
     mode = (camera.get("mode") or "").lower()
     if mode == "webcam":
         return int(camera.get("webcam_index", 0))
@@ -1252,7 +1476,8 @@ def run_all_configured_cameras(module: Optional[str] = None, show_preview: bool 
 
     for cam in cameras:
         cid    = cam.get("id") or f"cam_{len(workers)+1}"
-        zone   = cam.get("zone", "corridor")
+        raw_zone = cam.get("runtime_zone") or cam.get("zone", "corridor")
+        zone   = _resolve_runtime_zone(raw_zone)
         source = _resolve_camera_source(cam)
         if source is None:
             logging.warning(f"Skipping {cid}: no source")

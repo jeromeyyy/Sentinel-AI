@@ -13,12 +13,14 @@ from .outgate import OutgateProcessor
 from .corridor import CorridorProcessor
 from .school_ground import SchoolGroundProcessor
 from .classroom import ClassroomProcessor
+from .fire_only import FireOnlyProcessor
 
 ZONE_PROCESSORS = {
     "outgate": OutgateProcessor,
     "corridor": CorridorProcessor,
     "school_ground": SchoolGroundProcessor,
     "classroom": ClassroomProcessor,
+    "fire_only": FireOnlyProcessor,
 }
 
 __all__ = [
@@ -27,4 +29,5 @@ __all__ = [
     "CorridorProcessor",
     "SchoolGroundProcessor",
     "ClassroomProcessor",
+    "FireOnlyProcessor",
 ]

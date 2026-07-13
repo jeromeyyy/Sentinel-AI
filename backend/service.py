@@ -1,8 +1,47 @@
 import os
 import time
+import logging
 from typing import Dict, List
+from pathlib import Path
 
 import requests
+
+# Import WhatsApp notification module
+try:
+    from notifications.whatsapp import (
+        send_whatsapp_alert_nonblocking,
+        format_alert_message,
+        is_whatsapp_configured,
+    )
+    WHATSAPP_AVAILABLE = True
+except ImportError:
+    WHATSAPP_AVAILABLE = False
+
+# Import Phone Call notification module (emergency escalation)
+try:
+    from notifications.phone_call import (
+        record_high_alert,
+        is_phone_configured,
+    )
+    PHONE_CALL_AVAILABLE = True
+except ImportError:
+    PHONE_CALL_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
+# Get backend URL for constructing public snapshot URLs
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").replace("/event", "")
+
+# Log module availability
+if WHATSAPP_AVAILABLE:
+    logger.info("✅ WhatsApp notification module loaded successfully")
+else:
+    logger.warning("⚠️ WhatsApp notification module not available")
+
+if PHONE_CALL_AVAILABLE:
+    logger.info("✅ Phone call notification module loaded successfully")
+else:
+    logger.warning("⚠️ Phone call notification module not available")
 
 """
 Alert service for SAAS school module.
@@ -11,6 +50,10 @@ This stays transport‑agnostic: instead of actually calling SMS /
 WhatsApp / ambulances / fire brigade, it returns a rich `alert`
 payload listing *what* would be done so the caller (or another
 worker) can integrate with real services later.
+
+WhatsApp Integration:
+When an incident crosses the suspicion threshold, a WhatsApp alert
+is sent via Twilio Sandbox (non-blocking).
 """
 
 
@@ -246,6 +289,8 @@ def _call_llm(prompt: str) -> str:
 def trigger_alert(incident: Dict) -> Dict:
     """
     Translate an incident from the engine into a concrete alert description.
+    
+    Also sends WhatsApp notification for high-priority incidents (non-blocking).
     """
     if not incident:
         return {"alert": False, "summary": "No incident data."}
@@ -268,5 +313,124 @@ def trigger_alert(incident: Dict) -> Dict:
         **scenario_block,
     }
 
+    # ─── WhatsApp Notification (Non-Blocking) ────────────────────────────────
+    # Send WhatsApp alert for incidents that crossed the threshold
+    _send_whatsapp_notification(incident, alert)
+
+    # ─── Phone Call Escalation ───────────────────────────────────────────────
+    # Track high-confidence alerts - triggers call after 3 from same camera
+    _check_phone_call_escalation(incident)
+
     print(f"ALERT: {alert}")
     return alert
+
+
+def _send_whatsapp_notification(incident: Dict, alert: Dict) -> None:
+    """
+    Send WhatsApp notification for an incident (non-blocking).
+    
+    Only sends for certain priority levels and event types.
+    Failures are logged but do not affect the main alert flow.
+    """
+    if not WHATSAPP_AVAILABLE:
+        logger.debug("WhatsApp module not available, skipping notification.")
+        return
+    
+    if not is_whatsapp_configured():
+        logger.debug("WhatsApp not configured, skipping notification.")
+        return
+    
+    try:
+        event = incident.get("event", {})
+        priority = incident.get("priority", "medium")
+        event_type = event.get("event_type", "unknown")
+        
+        # Define which events should trigger WhatsApp alerts
+        # Critical and high priority events always get WhatsApp alerts
+        # All detected security events should be notified
+        whatsapp_event_types = {
+            "weapon_detected",
+            "fight",
+            "fire_smoke",
+            "gate_accident",
+            "intrusion",
+            "fire_smoke_detected",
+            "fall_detected",
+            "crowd_formation",
+            "mobile_usage",
+            "after_hours_intrusion",
+            "vehicle_detected",  # informational
+        }
+        
+        should_send = (
+            priority in ("critical", "high") or
+            event_type in whatsapp_event_types
+        )
+        
+        if not should_send:
+            logger.debug(f"Skipping WhatsApp for low-priority event: {event_type}")
+            return
+        
+        # Format the message with AI-powered summary
+        zone = event.get("zone") or event.get("camera_zone", "Unknown Zone")
+        confidence = event.get("confidence", 0.0)
+        camera_id = event.get("camera_id", "unknown")
+        timestamp = event.get("timestamp", time.time())
+        snapshot_path = event.get("snapshot_path")
+        metadata = event.get("metadata", {})
+        
+        message = format_alert_message(
+            zone=zone,
+            event_type=event_type,
+            confidence=confidence,
+            camera_id=camera_id,
+            priority=priority,
+            timestamp=timestamp,
+            snapshot_path=snapshot_path,
+            metadata=metadata,
+        )
+        
+        # Send non-blocking (fire-and-forget) with camera_id for deduplication
+        # Only one alert per camera within cooldown period (default 30s)
+        logger.info(f"Triggering WhatsApp alert for {event_type} (priority: {priority}, camera={camera_id})")
+        send_whatsapp_alert_nonblocking(message, camera_id=camera_id)
+        
+    except Exception as e:
+        # Log but don't propagate - WhatsApp failure should not affect core functionality
+        logger.error(f"Failed to send WhatsApp notification: {e}")
+
+
+def _check_phone_call_escalation(incident: Dict) -> None:
+    """
+    Check if phone call should be triggered based on high-confidence alerts.
+    
+    When 3 high-confidence (>=0.85) alerts occur from the same camera,
+    an emergency phone call is automatically triggered.
+    
+    Failures are logged but do not affect the main alert flow.
+    """
+    if not PHONE_CALL_AVAILABLE:
+        logger.debug("Phone call module not available, skipping escalation check.")
+        return
+    
+    if not is_phone_configured():
+        logger.debug("Phone calls not configured, skipping escalation check.")
+        return
+    
+    try:
+        event = incident.get("event", {})
+        camera_id = event.get("camera_id", "unknown")
+        confidence = event.get("confidence", 0.0)
+        
+        # Record the high alert - this will trigger call if threshold reached
+        call_triggered = record_high_alert(camera_id, confidence)
+        
+        if call_triggered:
+            logger.warning(
+                f"🚨 EMERGENCY CALL TRIGGERED for camera={camera_id} "
+                f"(3+ high-confidence alerts detected)"
+            )
+        
+    except Exception as e:
+        # Log but don't propagate - phone call failure should not affect core functionality
+        logger.error(f"Failed to check phone call escalation: {e}")

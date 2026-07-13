@@ -1,50 +1,43 @@
 from fastapi import FastAPI, WebSocket, Request, Response, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-<<<<<<< HEAD
-from starlette.middleware.sessions import SessionMiddleware
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import logging
 import importlib.util
 import sys
 import os
+import subprocess
 import io
 import json
 import glob
 from pathlib import Path
-<<<<<<< HEAD
-import uuid
-from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
-=======
-from fastapi.responses import StreamingResponse, JSONResponse
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from reportlab.pdfgen import canvas
 import cv2
 import threading
 import time
 from typing import Dict, List, Optional
 import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
-<<<<<<< HEAD
-from datetime import datetime, timedelta
 
-from authlib.integrations.starlette_client import OAuth, OAuthError
-from jose import jwt, JWTError
-import redis
+# Load environment variables from centralized .env in project root
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
 
-from json_store import load_cameras, save_cameras, load_incidents, save_incidents, append_incident, load_tenants, save_tenants
+# ============================================================================
+# OPENCV FFMPEG CONFIGURATION - Enhanced H.264 Decoding
+# ============================================================================
+# Configure FFmpeg for better RTSP handling (keep warnings visible for debugging)
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+    "rtsp_transport;tcp|"           # Use TCP (more reliable than UDP)
+    "max_delay;500000|"              # 500ms max delay
+    "reorder_queue_size;0|"          # Disable reordering (reduce lag)
+    "buffer_size;1024000|"           # 1MB buffer
+    "fflags;nobuffer|"               # Reduce buffering
+    "flags;low_delay"                # Prioritize low latency
+)
 
-# Load environment variables
-load_dotenv()
-
-=======
-
-# Load environment variables
-load_dotenv()
-
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 # ============================================================================
 # ENVIRONMENT CONFIGURATION
 # ============================================================================
@@ -53,28 +46,27 @@ MODULE = os.getenv("MODULE", "school")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "*")  # Set to your Vercel domain in production
-<<<<<<< HEAD
-
-AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
-JWT_SECRET = os.getenv("JWT_SECRET", "dev_secret_change_me")
-JWT_EXP_MINUTES = int(os.getenv("JWT_EXP_MINUTES", 60))
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "")
-
-REDIS_URL = os.getenv("REDIS_URL", "")
-JSON_STORE_ENABLED = os.getenv("JSON_STORE_ENABLED", "false").lower() == "true"
-
-VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm")
-=======
 AUTO_DISCOVER_TEST_VIDEOS = os.getenv("AUTO_DISCOVER_TEST_VIDEOS", "0").lower() in ("1", "true", "yes", "on")
 
 VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm")
 ALLOWED_UPLOAD_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 ZONE_CYCLE = ["outgate", "corridor", "school_ground", "classroom"]
 SUPPORTED_MODULES = ["home", "school", "office"]
 DEFAULT_MODULE = MODULE  # Use env var
+
+CUSTOM_ZONE_RUNTIME_MAP = {
+    "workspace": "fire_only",
+    "hallway": "fire_only",
+    "meeting_hall": "fire_only",
+    "living_room": "fire_only",
+    "server_room": "corridor",
+    "door": "corridor",
+    "parking": "school_ground",
+    "ground": "school_ground",
+    "main_gate": "outgate",
+}
+
+FIRE_ONLY_ZONES = {"workspace", "hallway", "meeting_hall", "living_room", "fire_only"}
 
 # Setup logging with colors
 import sys
@@ -103,6 +95,9 @@ handler.setFormatter(ColoredFormatter(
 ))
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 
+# Create logger instance
+logger = logging.getLogger(__name__)
+
 # Import event engine and alert service (now in same directory)
 try:
     from engine import process_event
@@ -111,55 +106,24 @@ except ImportError:
     process_event = lambda event: {"incident": False}
     trigger_alert = lambda incident: {"alert": False, "summary": "(mock)"}
 
-<<<<<<< HEAD
-app = FastAPI(title="SentinelAI Backend")
-
-SESSION_COOKIE_NAME = "sentinel_session"
-
-# Session middleware required for OAuth state
-app.add_middleware(SessionMiddleware, secret_key=JWT_SECRET, session_cookie="oauth_state")
-
-# OAuth setup (Google)
-oauth = OAuth()
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-    oauth.register(
-        name="google",
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
+# Import database module
+try:
+    from db import (
+        init_db,
+        close_db,
+        db,
+        insert_incident,
+        get_incidents,
+        get_all_cameras,
+        get_camera_by_id,
+        upsert_camera,
+        delete_camera_by_id,
     )
+    DB_ENABLED = True
+except ImportError as e:
+    logging.warning(f"Database module not available: {e}")
+    DB_ENABLED = False
 
-# Optional Redis client for event streaming
-redis_client = None
-if REDIS_URL:
-    try:
-        redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
-    except Exception as exc:
-        logging.warning(f"Redis init failed: {exc}")
-
-
-def _frontend_base_url() -> str:
-    if FRONTEND_URL and FRONTEND_URL != "*":
-        return FRONTEND_URL.rstrip("/")
-    return "http://localhost:3000"
-
-
-def _create_jwt(user: dict) -> str:
-    exp = datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
-    payload = {"sub": user.get("sub"), "email": user.get("email"), "name": user.get("name"), "exp": exp}
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-
-
-def _get_user_from_request(request: Request) -> Optional[dict]:
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    if not token:
-        return None
-    try:
-        return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-    except JWTError:
-        return None
-=======
 # Import auth module
 try:
     from auth import (
@@ -181,7 +145,6 @@ except ImportError as e:
     AUTH_ENABLED = False
 
 app = FastAPI(title="SentinelAI Backend")
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 # Configure CORS - use FRONTEND_URL env var in production
 allowed_origins = ["*"] if FRONTEND_URL == "*" else [
@@ -202,72 +165,97 @@ app.add_middleware(
 # ============================================================================
 alerts_history: List[Dict] = []
 incidents: Dict[str, Dict] = {}
-<<<<<<< HEAD
-tenants: Dict[str, Dict] = {}
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 active_alert_clients: List[WebSocket] = []
 alert_broadcast_queue: asyncio.Queue = asyncio.Queue()
 
 # Camera/Zone configuration
 camera_configs: Dict[str, Dict] = {}
 selected_module: str = DEFAULT_MODULE
+camera_worker_processes: Dict[str, subprocess.Popen] = {}
 
-<<<<<<< HEAD
-
-def _bootstrap_json_store() -> None:
-    if not JSON_STORE_ENABLED:
-        return
-
-    try:
-        for tenant in load_tenants():
-            if tenant.get("id"):
-                tenants[tenant["id"]] = tenant
-
-        for cam in load_cameras():
-            if cam.get("id"):
-                camera_configs[cam["id"]] = cam
-
-        for item in load_incidents():
-            event = item.get("event") or {}
-            alert = item.get("alert") or {}
-            incident_id = item.get("incident_id") or event.get("event_id")
-            if incident_id:
-                incidents[incident_id] = {"event": event, "alert": alert}
-                alerts_history.append({"event": event, "alert": alert})
-    except Exception as exc:
-        logging.warning(f"JSON store bootstrap failed: {exc}")
-
-
-_bootstrap_json_store()
-
-
-def _persist_cameras() -> None:
-    if not JSON_STORE_ENABLED:
-        return
-    try:
-        save_cameras(list(camera_configs.values()))
-    except Exception as exc:
-        logging.warning(f"Camera JSON save failed: {exc}")
-
-
-def _persist_tenants() -> None:
-    if not JSON_STORE_ENABLED:
-        return
-    try:
-        save_tenants(list(tenants.values()))
-    except Exception as exc:
-        logging.warning(f"Tenant JSON save failed: {exc}")
-
-# Camera sync caching (prevents repeated discovery)
-_camera_sync_cache: Dict[str, float] = {}  # module -> last_sync_timestamp
-_CAMERA_SYNC_CACHE_TTL: float = 60.0  # Only re-sync every 60 seconds
-=======
 # Camera sync caching (prevents repeated discovery)
 _camera_sync_cache: Dict[str, float] = {}  # module -> last_sync_timestamp
 _CAMERA_SYNC_CACHE_TTL: float = 60.0  # Only re-sync every 60 seconds
 _missing_test_videos_logged: bool = False
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
+
+
+def _camera_worker_script() -> Path:
+    return Path(__file__).resolve().parent / "worker" / "worker.py"
+
+
+def _stop_camera_worker(camera_id: str) -> None:
+    process = camera_worker_processes.pop(camera_id, None)
+    if not process:
+        return
+
+    if process.poll() is None:
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except Exception:
+            try:
+                process.kill()
+            except Exception:
+                pass
+
+
+def _sync_camera_worker(camera_id: str, restart: bool = False) -> bool:
+    camera = camera_configs.get(camera_id)
+    if not camera or not camera.get("active", True):
+        _stop_camera_worker(camera_id)
+        return False
+
+    raw_source = camera.get("rtsp_url") or camera.get("video_path") or camera.get("source")
+    source = _resolve_stream_source(raw_source)
+    if not source:
+        _stop_camera_worker(camera_id)
+        return False
+
+    zone = _resolve_runtime_zone(camera.get("runtime_zone") or camera.get("zone") or "corridor")
+    if zone not in ZONE_TYPES:
+        zone = "corridor"
+
+    existing = camera_worker_processes.get(camera_id)
+    if existing and existing.poll() is None and not restart:
+        return True
+
+    _stop_camera_worker(camera_id)
+
+    worker_script = _camera_worker_script()
+    if not worker_script.exists():
+        logging.error(f"[WORKER_START] Missing worker script: {worker_script}")
+        return False
+
+    command = [
+        sys.executable,
+        str(worker_script),
+        zone,
+        source,
+        camera_id,
+        "--no-preview",
+    ]
+
+    try:
+        process = subprocess.Popen(command, cwd=str(worker_script.parent))
+        camera_worker_processes[camera_id] = process
+        logging.info(
+            f"[WORKER_START] camera={camera_id} zone={zone} source={source} pid={process.pid}"
+        )
+        return True
+    except Exception as exc:
+        logging.error(f"[WORKER_START] Failed to start worker for {camera_id}: {exc}")
+        return False
+
+
+def _sync_active_camera_workers() -> None:
+    for camera_id, camera in list(camera_configs.items()):
+        if camera.get("active", True):
+            _sync_camera_worker(camera_id)
+
+
+def _stop_all_camera_workers() -> None:
+    for camera_id in list(camera_worker_processes.keys()):
+        _stop_camera_worker(camera_id)
 
 # Zone definitions
 ZONE_TYPES = {
@@ -296,7 +284,63 @@ ZONE_TYPES = {
         "events": ["vehicle_detected", "gate_accident", "crowd_formation", "fight", "mobile_usage"],
         "description": "Run all zone detectors simultaneously for comprehensive monitoring",
     },
+    "workspace": {
+        "name": "Workspace",
+        "events": ["fire_smoke_detected"],
+        "description": "Office workspace fire and smoke monitoring",
+    },
+    "hallway": {
+        "name": "Hallway",
+        "events": ["fire_smoke_detected"],
+        "description": "Office hallway fire and smoke monitoring",
+    },
+    "meeting_hall": {
+        "name": "Meeting Hall",
+        "events": ["fire_smoke_detected"],
+        "description": "Meeting hall fire and smoke monitoring",
+    },
+    "server_room": {
+        "name": "Server Room",
+        "events": ["crowd_formation", "fight", "weapon_detected", "fire_smoke_detected", "after_hours_intrusion"],
+        "description": "Server room monitoring routed to corridor behavior model",
+    },
+    "door": {
+        "name": "Door",
+        "events": ["crowd_formation", "fight", "weapon_detected", "fire_smoke_detected", "after_hours_intrusion"],
+        "description": "Home door monitoring routed to corridor behavior model",
+    },
+    "parking": {
+        "name": "Parking",
+        "events": ["crowd_formation", "fight", "weapon_detected", "fall_detected", "fire_smoke_detected", "after_hours_intrusion"],
+        "description": "Home parking monitoring routed to ground model",
+    },
+    "main_gate": {
+        "name": "Main Gate",
+        "events": ["vehicle_detected", "gate_accident", "weapon_detected", "fire_smoke_detected", "after_hours_intrusion"],
+        "description": "Home main gate monitoring routed to outgate model",
+    },
+    "living_room": {
+        "name": "Living Room",
+        "events": ["fire_smoke_detected"],
+        "description": "Living room fire and smoke monitoring",
+    },
 }
+
+
+def _normalize_zone_id(zone: Optional[str]) -> str:
+    if not zone:
+        return "corridor"
+    zone_clean = str(zone).strip().lower().replace(" ", "_")
+    if zone_clean == "ground":
+        return "school_ground"
+    return zone_clean
+
+
+def _resolve_runtime_zone(zone: Optional[str]) -> str:
+    zone_id = _normalize_zone_id(zone)
+    if zone_id in CUSTOM_ZONE_RUNTIME_MAP:
+        return CUSTOM_ZONE_RUNTIME_MAP[zone_id]
+    return zone_id
 
 
 def _get_test_videos_dir() -> str:
@@ -318,18 +362,27 @@ def _module_test_videos_dir(module: Optional[str]) -> str:
     return os.path.join(base_dir, normalized)
 
 
-<<<<<<< HEAD
-=======
-def _resolve_video_path(video_path: Optional[str]) -> Optional[str]:
-    """Resolve local video paths against common runtime locations."""
-    if not video_path:
+def _normalize_stream_source(video_path: Optional[str]) -> Optional[str]:
+    if video_path is None:
         return None
 
     raw = str(video_path).strip()
     if not raw:
         return None
 
-    if raw.startswith(("rtsp://", "http://", "https://")):
+    if raw.lower().startswith("rstp://"):
+        return f"rtsp://{raw[7:]}"
+
+    return raw
+
+
+def _resolve_video_path(video_path: Optional[str]) -> Optional[str]:
+    """Resolve local video paths against common runtime locations."""
+    raw = _normalize_stream_source(video_path)
+    if not raw:
+        return None
+
+    if raw.lower().startswith(("rtsp://", "http://", "https://")):
         return raw
 
     if os.path.isabs(raw) and os.path.exists(raw):
@@ -360,7 +413,6 @@ def _get_uploaded_videos_dir() -> str:
     return upload_dir
 
 
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 def _normalize_camera_id_from_video(video_path: str) -> str:
     stem = Path(video_path).stem.lower().strip()
     cleaned = ''.join(ch if ch.isalnum() else '_' for ch in stem)
@@ -404,23 +456,16 @@ def _infer_zone_from_path(video_path: str, fallback_index: int) -> str:
 
 
 def discover_test_videos(module: Optional[str] = None) -> List[Dict]:
-<<<<<<< HEAD
-=======
     global _missing_test_videos_logged
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     normalized_module = _normalize_module(module or selected_module)
     test_videos_dir = _get_test_videos_dir()
     module_dir = _module_test_videos_dir(normalized_module)
     videos: List[Dict] = []
     logging.info(f"[VIDEO_DISCOVERY] module={normalized_module} base_dir={test_videos_dir} module_dir={module_dir}")
     if not os.path.exists(test_videos_dir):
-<<<<<<< HEAD
-        logging.warning(f"[VIDEO_DISCOVERY] test_videos base directory not found: {test_videos_dir}")
-=======
         if not _missing_test_videos_logged:
             logging.warning(f"[VIDEO_DISCOVERY] test_videos base directory not found: {test_videos_dir}")
             _missing_test_videos_logged = True
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         return videos
 
     candidates: List[str] = []
@@ -457,12 +502,9 @@ def discover_test_videos(module: Optional[str] = None) -> List[Dict]:
 
 def sync_camera_configs_from_test_videos(module: Optional[str] = None, force: bool = False) -> None:
     """Sync camera configs from test videos. Uses caching to avoid repeated discovery."""
-<<<<<<< HEAD
-=======
     if not AUTO_DISCOVER_TEST_VIDEOS:
         return
 
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     normalized_module = _normalize_module(module or selected_module)
     
     # Check cache - skip sync if recently done (unless forced)
@@ -493,11 +535,13 @@ def sync_camera_configs_from_test_videos(module: Optional[str] = None, force: bo
             "id": camera_id,
             "name": name,
             "zone": zone,
+            "runtime_zone": _resolve_runtime_zone(zone),
             "video_path": video["path"],
             "active": active,
             "source": "test_video",
             "video_name": video["name"],
             "module": normalized_module,
+            "model": _get_zone_model(zone),
         }
         logging.info(
             f"[CAMERA_SYNC] mapped camera={camera_id} name={name} video={video['name']} zone={zone} module={normalized_module}"
@@ -518,8 +562,37 @@ def sync_camera_configs_from_test_videos(module: Optional[str] = None, force: bo
 async def startup_event():
     """Initialize camera configs on server startup."""
     logging.info("[STARTUP] Initializing camera configurations...")
+    
+    # Initialize MongoDB connection
+    if DB_ENABLED:
+        logging.info("[STARTUP] Connecting to MongoDB Atlas...")
+        db_connected = await init_db()
+        if db_connected:
+            logging.info("[STARTUP] MongoDB connection established")
+            # Load cameras from database
+            db_cameras = await get_all_cameras()
+            for cam in db_cameras:
+                camera_configs[cam["id"]] = cam
+            logging.info(f"[STARTUP] Loaded {len(db_cameras)} cameras from MongoDB")
+        else:
+            logging.warning("[STARTUP] MongoDB connection failed - using in-memory storage")
+    
+    # Also sync test videos for development
     sync_camera_configs_from_test_videos(selected_module, force=True)
-    logging.info(f"[STARTUP] Loaded {len(camera_configs)} cameras for module={selected_module}")
+    logging.info(f"[STARTUP] Total {len(camera_configs)} cameras available for module={selected_module}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on server shutdown."""
+    logging.info("[SHUTDOWN] Cleaning up resources...")
+    if DB_ENABLED:
+        try:
+            await close_db()
+            logging.info("[SHUTDOWN] MongoDB connection closed")
+        except Exception as e:
+            logging.error(f"[SHUTDOWN] Error closing MongoDB: {e}")
+    logging.info("[SHUTDOWN] Server shutdown complete")
 
 
 # Video capture instances for streaming
@@ -535,65 +608,6 @@ def health():
 
 
 # ============================================================================
-<<<<<<< HEAD
-# AUTHENTICATION (GOOGLE OAUTH)
-# ============================================================================
-@app.get("/auth/google/login")
-async def auth_google_login(request: Request):
-    if not AUTH_ENABLED:
-        return JSONResponse({"error": "auth_disabled"}, status_code=501)
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        return JSONResponse({"error": "oauth_not_configured"}, status_code=500)
-    redirect_uri = GOOGLE_REDIRECT_URI or request.url_for("auth_google_callback")
-    return await oauth.google.authorize_redirect(request, redirect_uri)
-
-
-@app.get("/auth/google/callback", name="auth_google_callback")
-async def auth_google_callback(request: Request):
-    if not AUTH_ENABLED:
-        return JSONResponse({"error": "auth_disabled"}, status_code=501)
-    try:
-        token = await oauth.google.authorize_access_token(request)
-        userinfo = token.get("userinfo")
-        if not userinfo:
-            userinfo = await oauth.google.parse_id_token(request, token)
-        if not userinfo:
-            return JSONResponse({"error": "userinfo_not_found"}, status_code=400)
-    except OAuthError as exc:
-        logging.error(f"OAuth error: {exc}")
-        return JSONResponse({"error": "oauth_failed"}, status_code=400)
-
-    jwt_token = _create_jwt(userinfo)
-    response = RedirectResponse(url=f"{_frontend_base_url()}/")
-    response.set_cookie(
-        SESSION_COOKIE_NAME,
-        jwt_token,
-        httponly=True,
-        samesite="lax",
-        secure=request.url.scheme == "https",
-        max_age=JWT_EXP_MINUTES * 60,
-    )
-    return response
-
-
-@app.get("/auth/me")
-async def auth_me(request: Request):
-    if not AUTH_ENABLED:
-        return JSONResponse({"authenticated": False, "auth_enabled": False})
-    user = _get_user_from_request(request)
-    if not user:
-        return JSONResponse({"authenticated": False}, status_code=401)
-    return {"authenticated": True, "user": user}
-
-
-@app.post("/auth/logout")
-async def auth_logout():
-    if not AUTH_ENABLED:
-        return JSONResponse({"success": False, "auth_enabled": False})
-    response = JSONResponse({"success": True})
-    response.delete_cookie(SESSION_COOKIE_NAME)
-    return response
-=======
 # AUTHENTICATION ENDPOINTS
 # ============================================================================
 @app.get("/auth/google")
@@ -682,7 +696,6 @@ async def verify_token(user: User = Depends(get_current_user)):
             }
         }
     return {"valid": False, "user": None}
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 
 # ============================================================================
@@ -719,65 +732,28 @@ async def set_current_module(data: dict):
     }
 
 
-<<<<<<< HEAD
-# ============================================================================
-# TENANT MANAGEMENT
-# ============================================================================
-@app.get("/api/tenants")
-def list_tenants():
-    return {"tenants": list(tenants.values())}
-
-
-@app.post("/api/tenant")
-async def create_tenant(data: dict):
-    name = data.get("name")
-    module = data.get("module", selected_module)
-    if not name:
-        return JSONResponse({"error": "name is required"}, status_code=400)
-
-    tenant_id = data.get("id") or f"tenant_{uuid.uuid4().hex[:8]}"
-    now = datetime.utcnow().isoformat() + "Z"
-    tenant = {
-        "id": tenant_id,
-        "name": name,
-        "module": module,
-        "created_at": now,
-        "updated_at": now,
-        "settings": data.get("settings", {}),
-    }
-    tenants[tenant_id] = tenant
-    _persist_tenants()
-    return {"success": True, "tenant": tenant}
-
-
-@app.get("/api/tenant/{tenant_id}")
-def get_tenant(tenant_id: str):
-    tenant = tenants.get(tenant_id)
-    if not tenant:
-        return JSONResponse({"error": "Tenant not found"}, status_code=404)
-    return tenant
-
-
-@app.post("/api/tenant/{tenant_id}")
-async def update_tenant(tenant_id: str, data: dict):
-    tenant = tenants.get(tenant_id)
-    if not tenant:
-        return JSONResponse({"error": "Tenant not found"}, status_code=404)
-    tenant.update(data)
-    tenant["updated_at"] = datetime.utcnow().isoformat() + "Z"
-    tenants[tenant_id] = tenant
-    _persist_tenants()
-    return {"success": True, "tenant": tenant}
-
-
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 @app.get("/api/cameras")
-def get_cameras(request: Request):
+async def get_cameras(request: Request):
     """Get all camera configurations."""
     requested_module = request.query_params.get("module")
     active_module = _normalize_module(requested_module or selected_module)
+    
+    # Load cameras from MongoDB if available
+    if DB_ENABLED:
+        try:
+            db_cameras = await get_all_cameras()
+            for cam in db_cameras:
+                if cam.get("id") not in camera_configs:
+                    camera_configs[cam["id"]] = cam
+        except Exception as e:
+            logging.error(f"[DB] Failed to load cameras: {e}")
+    
     sync_camera_configs_from_test_videos(active_module)
+    for cam in camera_configs.values():
+        zone_id = _normalize_zone_id(cam.get("zone", "corridor"))
+        cam["zone"] = zone_id
+        cam.setdefault("runtime_zone", _resolve_runtime_zone(zone_id))
+        cam.setdefault("model", _get_zone_model(zone_id))
     visible_cameras = [
         cam for cam in camera_configs.values()
         if cam.get("source") != "test_video" or cam.get("module") == active_module
@@ -786,8 +762,18 @@ def get_cameras(request: Request):
 
 
 @app.get("/api/camera/{camera_id}")
-def get_camera(camera_id: str):
+async def get_camera(camera_id: str):
     """Get specific camera configuration."""
+    # Try MongoDB first
+    if DB_ENABLED:
+        try:
+            db_cam = await get_camera_by_id(camera_id)
+            if db_cam:
+                camera_configs[camera_id] = db_cam
+                return db_cam
+        except Exception as e:
+            logging.error(f"[DB] Failed to get camera {camera_id}: {e}")
+    
     sync_camera_configs_from_test_videos(selected_module)
     if camera_id not in camera_configs:
         return JSONResponse({"error": "Camera not found"}, status_code=404)
@@ -798,22 +784,50 @@ def get_camera(camera_id: str):
 async def update_camera(camera_id: str, config: dict):
     """Update camera configuration."""
     sync_camera_configs_from_test_videos(selected_module)
+
+    stream_source = _normalize_stream_source(
+        config.get("video_path") or config.get("rtsp_url") or config.get("source")
+    )
+    if stream_source:
+        config["video_path"] = stream_source
+        if stream_source.lower().startswith("rtsp://"):
+            config["rtsp_url"] = stream_source
+
+    zone_value = config.get("zone")
+    if zone_value is not None:
+        normalized_zone = _normalize_zone_id(zone_value)
+        if normalized_zone not in ZONE_TYPES:
+            return JSONResponse({"error": f"Invalid zone: {zone_value}"}, status_code=400)
+        config["zone"] = normalized_zone
+        config["runtime_zone"] = _resolve_runtime_zone(normalized_zone)
+        config["model"] = _get_zone_model(normalized_zone)
+
     if camera_id not in camera_configs:
         camera_configs[camera_id] = {"id": camera_id}
     
     camera_configs[camera_id].update(config)
+    if "runtime_zone" not in camera_configs[camera_id]:
+        stored_zone = camera_configs[camera_id].get("zone", "corridor")
+        camera_configs[camera_id]["runtime_zone"] = _resolve_runtime_zone(stored_zone)
+    if "model" not in camera_configs[camera_id]:
+        camera_configs[camera_id]["model"] = _get_zone_model(camera_configs[camera_id].get("zone", "corridor"))
+
+    # Persist to MongoDB
+    if DB_ENABLED:
+        try:
+            await upsert_camera(camera_configs[camera_id])
+            logging.info(f"[DB] Camera {camera_id} updated in MongoDB")
+        except Exception as e:
+            logging.error(f"[DB] Failed to update camera {camera_id}: {e}")
+
     logging.info(f"Updated camera config: {camera_id} -> {camera_configs[camera_id]}")
-<<<<<<< HEAD
-    _persist_cameras()
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     return {"success": True, "camera": camera_configs[camera_id]}
 
 
 @app.post("/api/camera/{camera_id}/zone")
 async def set_camera_zone(camera_id: str, data: dict):
     """Set zone for a camera."""
-    zone = data.get("zone")
+    zone = _normalize_zone_id(data.get("zone"))
     if zone not in ZONE_TYPES:
         return JSONResponse({"error": f"Invalid zone: {zone}"}, status_code=400)
     
@@ -821,8 +835,151 @@ async def set_camera_zone(camera_id: str, data: dict):
         camera_configs[camera_id] = {"id": camera_id, "name": camera_id, "active": True}
     
     camera_configs[camera_id]["zone"] = zone
+    camera_configs[camera_id]["runtime_zone"] = _resolve_runtime_zone(zone)
+    camera_configs[camera_id]["model"] = _get_zone_model(zone)
+    
+    # Persist to MongoDB
+    if DB_ENABLED:
+        try:
+            await upsert_camera(camera_configs[camera_id])
+            logging.info(f"[DB] Camera {camera_id} zone updated in MongoDB")
+        except Exception as e:
+            logging.error(f"[DB] Failed to update camera zone {camera_id}: {e}")
+    
     logging.info(f"Camera {camera_id} zone set to: {zone}")
+    _sync_camera_worker(camera_id, restart=True)
     return {"success": True, "camera": camera_configs[camera_id]}
+
+
+@app.post("/api/camera/{camera_id}/source")
+async def update_camera_source(camera_id: str, data: dict):
+    """
+    Update camera video source (RTSP URL, HTTP stream, or video file).
+    
+    Payload:
+    {
+        "source": "rtsp://username:password@192.168.1.100:554/stream1",
+        // OR
+        "rtsp_url": "rtsp://...",
+        // OR
+        "video_path": "/path/to/video.mp4"
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "camera": {...},
+        "test_result": {
+            "can_open": true,
+            "resolution": "1920x1080",
+            "fps": 25.0,
+            "type": "RTSP"
+        }
+    }
+    """
+    if camera_id not in camera_configs:
+        return JSONResponse(
+            {"error": f"Camera '{camera_id}' not found. Use POST /api/camera to create it first."},
+            status_code=404
+        )
+    
+    # Get source from payload
+    source = data.get("source") or data.get("rtsp_url") or data.get("video_path")
+    
+    if not source:
+        return JSONResponse(
+            {"error": "Missing video source. Provide 'source', 'rtsp_url', or 'video_path'"},
+            status_code=400
+        )
+    
+    # Normalize source
+    normalized_source = _normalize_stream_source(source)
+    
+    if not normalized_source:
+        return JSONResponse(
+            {"error": f"Invalid video source: {source}"},
+            status_code=400
+        )
+    
+    # Determine source type
+    is_rtsp = normalized_source.startswith("rtsp://")
+    is_http = normalized_source.startswith(("http://", "https://"))
+    is_file = not (is_rtsp or is_http)
+    
+    source_type = "RTSP" if is_rtsp else "HTTP" if is_http else "FILE"
+    
+    # Validate file existence
+    if is_file:
+        resolved = _resolve_video_path(normalized_source)
+        if not resolved or not os.path.exists(resolved):
+            return JSONResponse(
+                {"error": f"Video file not found: {normalized_source}"},
+                status_code=400
+            )
+        normalized_source = resolved
+    
+    # Test connection
+    logger.info(f"[API] Testing video source for '{camera_id}': {normalized_source}")
+    test_cap = cv2.VideoCapture(normalized_source, cv2.CAP_FFMPEG)
+    
+    test_result = {
+        "can_open": test_cap.isOpened(),
+        "type": source_type,
+        "source": normalized_source
+    }
+    
+    if test_cap.isOpened():
+        width = int(test_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(test_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = test_cap.get(cv2.CAP_PROP_FPS)
+        
+        test_result.update({
+            "resolution": f"{width}x{height}",
+            "width": width,
+            "height": height,
+            "fps": fps if fps > 0 else None
+        })
+        test_cap.release()
+        
+        logger.info(f"[API] ✅ Video source test passed: {width}x{height} @ {fps}fps")
+    else:
+        test_cap.release()
+        logger.error(f"[API] ❌ Video source test failed: Cannot open {normalized_source}")
+        return JSONResponse(
+            {
+                "error": "Failed to open video source",
+                "details": f"Cannot connect to {source_type} stream: {normalized_source}",
+                "test_result": test_result
+            },
+            status_code=400
+        )
+    
+    # Update camera config
+    camera_configs[camera_id]["video_path"] = normalized_source
+    
+    if is_rtsp or is_http:
+        camera_configs[camera_id]["rtsp_url"] = normalized_source
+        camera_configs[camera_id]["source"] = normalized_source
+    
+    camera_configs[camera_id]["video_name"] = os.path.basename(normalized_source)
+    camera_configs[camera_id]["source_type"] = source_type
+    
+    # Persist to MongoDB
+    if DB_ENABLED:
+        try:
+            await upsert_camera(camera_configs[camera_id])
+            logger.info(f"[DB] Camera {camera_id} source updated in MongoDB")
+        except Exception as e:
+            logger.error(f"[DB] Failed to update camera {camera_id}: {e}")
+    
+    logger.info(f"[API] ✅ Updated camera '{camera_id}' video source to: {normalized_source}")
+    _sync_camera_worker(camera_id, restart=True)
+    
+    return {
+        "success": True,
+        "camera": camera_configs[camera_id],
+        "test_result": test_result
+    }
 
 
 # ============================================================================
@@ -847,8 +1004,8 @@ async def create_camera(data: dict):
         "camera": { ... camera config ... }
     }
     """
-    video_path = data.get("video_path")
-    zone = data.get("zone")
+    video_path = _normalize_stream_source(data.get("video_path") or data.get("rtsp_url") or data.get("source"))
+    zone = _normalize_zone_id(data.get("zone"))
     name = data.get("name")
     
     # Validate inputs
@@ -861,18 +1018,22 @@ async def create_camera(data: dict):
     if zone not in ZONE_TYPES:
         return JSONResponse({"error": f"Invalid zone: {zone}. Valid zones: {list(ZONE_TYPES.keys())}"}, status_code=400)
     
-    # Check if video exists (if local path)
-    abs_path = os.path.abspath(video_path)
-    if not video_path.startswith(("rtsp://", "http://", "https://")) and not os.path.exists(abs_path):
-        # Check in test_videos directory
-        test_video_path = os.path.join(_get_test_videos_dir(), os.path.basename(video_path))
-        if os.path.exists(test_video_path):
-            abs_path = test_video_path
-        else:
-            return JSONResponse({"error": f"Video file not found: {video_path}"}, status_code=400)
+    # Resolve source path (keep URLs untouched, resolve local files to absolute paths)
+    is_remote_source = video_path.lower().startswith(("rtsp://", "http://", "https://"))
+    if is_remote_source:
+        resolved_path = video_path
+    else:
+        resolved_path = os.path.abspath(video_path)
+        if not os.path.exists(resolved_path):
+            # Check in test_videos directory
+            test_video_path = os.path.join(_get_test_videos_dir(), os.path.basename(video_path))
+            if os.path.exists(test_video_path):
+                resolved_path = test_video_path
+            else:
+                return JSONResponse({"error": f"Video file not found: {video_path}"}, status_code=400)
     
     # Generate unique camera ID
-    camera_id = _normalize_camera_id_from_video(abs_path)
+    camera_id = _normalize_camera_id_from_video(resolved_path)
     
     # Handle duplicate IDs
     base_id = camera_id
@@ -883,28 +1044,37 @@ async def create_camera(data: dict):
     
     # Generate name if not provided
     if not name:
-        name = _friendly_name_from_video(abs_path)
+        name = _friendly_name_from_video(resolved_path)
     
     # Create camera config
     camera_config = {
         "id": camera_id,
         "name": name,
         "zone": zone,
-        "video_path": abs_path,
+        "runtime_zone": _resolve_runtime_zone(zone),
+        "video_path": resolved_path,
         "active": True,
         "source": "dynamic",
-        "video_name": os.path.basename(abs_path),
+        "video_name": os.path.basename(resolved_path),
         "model": _get_zone_model(zone),
         "created_at": time.time(),
     }
+
+    if is_remote_source:
+        camera_config["rtsp_url"] = resolved_path
     
     camera_configs[camera_id] = camera_config
-<<<<<<< HEAD
-    _persist_cameras()
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     
-    logging.info(f"🎥 Created new camera: {camera_id} -> zone={zone}, video={os.path.basename(abs_path)}")
+    # Persist to MongoDB
+    if DB_ENABLED:
+        try:
+            await upsert_camera(camera_config)
+            logging.info(f"[DB] Camera {camera_id} stored in MongoDB")
+        except Exception as e:
+            logging.error(f"[DB] Failed to store camera {camera_id}: {e}")
+    
+    logging.info(f"🎥 Created new camera: {camera_id} -> zone={zone}, video={os.path.basename(resolved_path)}")
+    _sync_camera_worker(camera_id, restart=True)
     
     return {
         "success": True,
@@ -913,8 +1083,6 @@ async def create_camera(data: dict):
     }
 
 
-<<<<<<< HEAD
-=======
 @app.post("/api/upload-video")
 async def upload_video(file: UploadFile = File(...)):
     """Upload a local test video to backend storage and return its absolute path."""
@@ -948,30 +1116,48 @@ async def upload_video(file: UploadFile = File(...)):
     }
 
 
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 def _get_zone_model(zone: str) -> str:
     """Get the model file for a zone."""
+    normalized_zone = _normalize_zone_id(zone)
+    runtime_zone = _resolve_runtime_zone(normalized_zone)
+
+    if normalized_zone in FIRE_ONLY_ZONES or runtime_zone == "fire_only":
+        return "fire_smoke_model.pt"
+
     zone_models = {
         "outgate": "yolov8n.pt",
         "corridor": "yolov8s.pt",
         "school_ground": "yolov8s.pt",
         "classroom": "yolov8m.pt",
     }
-    return zone_models.get(zone, "yolov8n.pt")
+    return zone_models.get(runtime_zone, "yolov8n.pt")
 
 
 @app.delete("/api/camera/{camera_id}")
 async def delete_camera(camera_id: str):
     """Delete a camera."""
     if camera_id not in camera_configs:
-        return JSONResponse({"error": "Camera not found"}, status_code=404)
+        # Try loading from DB
+        if DB_ENABLED:
+            db_cam = await get_camera_by_id(camera_id)
+            if not db_cam:
+                return JSONResponse({"error": "Camera not found"}, status_code=404)
+        else:
+            return JSONResponse({"error": "Camera not found"}, status_code=404)
     
-    config = camera_configs.pop(camera_id)
+    if camera_id in camera_configs:
+        config = camera_configs.pop(camera_id)
+    
+    # Delete from MongoDB
+    if DB_ENABLED:
+        try:
+            deleted = await delete_camera_by_id(camera_id)
+            if deleted:
+                logging.info(f"[DB] Camera {camera_id} deleted from MongoDB")
+        except Exception as e:
+            logging.error(f"[DB] Failed to delete camera {camera_id}: {e}")
+    
     logging.info(f"🗑️ Deleted camera: {camera_id}")
-<<<<<<< HEAD
-    _persist_cameras()
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     
     # Clean up video capture if exists
     if camera_id in video_captures:
@@ -999,29 +1185,12 @@ async def camera_health(camera_id: str):
     if camera_id in video_captures:
         cap = video_captures[camera_id]
         if cap is not None and cap.isOpened():
-<<<<<<< HEAD
-            payload = {
-=======
             return {
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
                 "status": "online",
                 "camera_id": camera_id,
                 "zone": config.get("zone"),
                 "active": config.get("active", True),
             }
-<<<<<<< HEAD
-            if redis_client:
-                try:
-                    redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
-                except Exception as exc:
-                    logging.warning(f"Redis health update failed: {exc}")
-            return payload
-    
-    # Try to check if video source is accessible
-    video_path = config.get("source") or config.get("video_path")
-    if video_path and os.path.exists(video_path):
-        payload = {
-=======
     
     # Try to check if video source is accessible
     video_path = config.get("video_path") or config.get("source")
@@ -1030,41 +1199,20 @@ async def camera_health(camera_id: str):
     resolved_video_path = _resolve_video_path(video_path)
     if resolved_video_path:
         return {
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
             "status": "online",
             "camera_id": camera_id,
             "zone": config.get("zone"),
             "active": config.get("active", True),
             "source": "file",
         }
-<<<<<<< HEAD
-        if redis_client:
-            try:
-                redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
-            except Exception as exc:
-                logging.warning(f"Redis health update failed: {exc}")
-        return payload
-    
-    payload = {
-=======
     
     return {
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         "status": "offline",
         "camera_id": camera_id,
         "zone": config.get("zone"),
         "active": config.get("active", True),
         "reason": "No video source found",
     }
-<<<<<<< HEAD
-    if redis_client:
-        try:
-            redis_client.hset(f"camera:{camera_id}:health", mapping=payload)
-        except Exception as exc:
-            logging.warning(f"Redis health update failed: {exc}")
-    return payload
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 
 @app.get("/api/system/health")
@@ -1118,103 +1266,106 @@ def list_test_videos(request: Request):
 # VIDEO STREAMING ENDPOINTS
 # ============================================================================
 def get_video_capture(camera_id: str) -> Optional[cv2.VideoCapture]:
-    """Get or create video capture for a camera."""
-    sync_camera_configs_from_test_videos(selected_module)
-    config = camera_configs.get(camera_id)
-    if not config:
+    """
+    Get OpenCV VideoCapture with RTSP optimization and error recovery.
+    
+    Supports:
+    - RTSP streams (rtsp://)
+    - HTTP/HTTPS streams (http://, https://)
+    - Local video files (absolute paths)
+    
+    Returns None if:
+    - Camera not found in configs
+    - No video source configured
+    - Failed to open video source
+    """
+    
+    if camera_id not in camera_configs:
+        logger.error(f"[VIDEO_CAPTURE] ❌ Camera '{camera_id}' not found in configs")
         return None
     
-    video_path = config.get("video_path", "")
+    config = camera_configs[camera_id]
+    camera_name = config.get("name", camera_id)
     
-    # Try configured video path
-<<<<<<< HEAD
-    if video_path and os.path.exists(video_path):
-        cap = cv2.VideoCapture(video_path)
-        if cap.isOpened():
-            return cap
+    # Get video source (try multiple fields)
+    video_source = (
+        config.get("rtsp_url") or 
+        config.get("video_path") or 
+        config.get("source") or 
+        None
+    )
     
-=======
-    resolved_video_path = _resolve_video_path(video_path)
-    if resolved_video_path:
-        cap = cv2.VideoCapture(resolved_video_path)
-        if cap.isOpened():
-            return cap
+    # Normalize and validate source
+    normalized_source = _normalize_stream_source(video_source)
     
-    # Try test_videos folder based on zone (only when auto-discovery is enabled)
-    if not AUTO_DISCOVER_TEST_VIDEOS:
+    if not normalized_source:
+        logger.error(
+            f"[VIDEO_CAPTURE] ❌ No video source configured for '{camera_name}' (ID: {camera_id})\n"
+            f"              Expected one of: rtsp_url, video_path, or source\n"
+            f"              Camera config: {config}"
+        )
         return None
-
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
-    # Try test_videos folder based on zone
-    zone = config.get("zone", "")
-    test_videos_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../test_videos'))
     
-    # Look for video matching zone name
-    for ext in ['mp4', 'avi', 'mov', 'mkv']:
-        zone_video = os.path.join(test_videos_dir, f"{zone}.{ext}")
-        if os.path.exists(zone_video):
-            cap = cv2.VideoCapture(zone_video)
-            if cap.isOpened():
-                return cap
+    # Determine source type
+    is_rtsp = normalized_source.startswith("rtsp://")
+    is_http = normalized_source.startswith(("http://", "https://"))
+    is_file = not (is_rtsp or is_http)
     
-    # Try any available video in test_videos
-    for video in discover_test_videos():
-        cap = cv2.VideoCapture(video["path"])
-        if cap.isOpened():
-            return cap
+    source_type = "RTSP" if is_rtsp else "HTTP" if is_http else "FILE"
     
-    # Fallback to webcam
-    for idx in range(4):
-        cap = cv2.VideoCapture(idx)
-        if cap.isOpened():
-            return cap
-        cap.release()
+    # Validate file existence for local files
+    if is_file:
+        resolved_path = _resolve_video_path(normalized_source)
+        if not resolved_path or not os.path.exists(resolved_path):
+            logger.error(
+                f"[VIDEO_CAPTURE] ❌ Video file not found: {normalized_source}\n"
+                f"              Camera: '{camera_name}' (ID: {camera_id})"
+            )
+            return None
+        normalized_source = resolved_path
     
-    return None
-
-
-def gen_video_frames(camera_id: str):
-    """Generate MJPEG frames for a specific camera."""
-    cap = get_video_capture(camera_id)
-    if cap is None:
-        # Return placeholder frame
-        placeholder = create_placeholder_frame(camera_id)
-        _, buffer = cv2.imencode('.jpg', placeholder)
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        return
+    logger.info(
+        f"[VIDEO_CAPTURE] 🎥 Opening '{camera_name}' (ID: {camera_id})\n"
+        f"              Type: {source_type}\n"
+        f"              Source: {normalized_source}"
+    )
     
-    config = camera_configs.get(camera_id, {})
-    zone = config.get("zone", "unknown")
+    # Open with FFmpeg backend explicitly
+    cap = cv2.VideoCapture(normalized_source, cv2.CAP_FFMPEG)
     
-    while True:
-        success, frame = cap.read()
-        if not success:
-            # Loop video
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            continue
-        
-        # Add zone overlay
-        frame = add_frame_overlay(frame, camera_id, zone)
-        
-        # Overlay latest detection boxes for this camera
-        for alert_data in reversed(alerts_history[-10:]):
-            event = alert_data.get("event", {})
-            if event.get("camera_id") == camera_id or event.get("zone") == zone:
-                boxes = event.get("bounding_boxes", [])
-                for box in boxes:
-                    if len(box) == 4:
-                        x1, y1, x2, y2 = [int(v) for v in box]
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                break
-        
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        
-        time.sleep(0.033)  # ~30 FPS
+    if not cap.isOpened():
+        logger.error(
+            f"[VIDEO_CAPTURE] ❌ Failed to open '{camera_name}'\n"
+            f"              Type: {source_type}\n"
+            f"              Source: {normalized_source}\n"
+            f"              Possible causes:\n"
+            f"              - RTSP: Wrong URL, auth failed, camera offline, network issue\n"
+            f"              - FILE: Corrupt file, unsupported codec, wrong path\n"
+            f"              - HTTP: Server down, wrong URL, network issue"
+        )
+        return None
     
-    cap.release()
+    # Apply RTSP optimizations (must be set AFTER opening)
+    if is_rtsp:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimal buffering
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+        cap.set(cv2.CAP_PROP_FPS, 15)  # Limit to 15 FPS
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)  # 10s open timeout
+        cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000)  # 10s read timeout
+        logger.info(f"[VIDEO_CAPTURE] ⚙️  Applied RTSP optimizations (TCP transport, H.264)")
+    
+    # Get actual stream properties
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    logger.info(
+        f"[VIDEO_CAPTURE] ✅ Successfully opened '{camera_name}'\n"
+        f"              Resolution: {width}x{height}\n"
+        f"              FPS: {fps if fps > 0 else 'Unknown'}"
+    )
+    
+    return cap
 
 
 def create_placeholder_frame(camera_id: str):
@@ -1232,6 +1383,190 @@ def create_placeholder_frame(camera_id: str):
     cv2.putText(frame, f"Zone: {config.get('zone', 'Not configured')}", (180, 290), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 80, 80), 1)
     
     return frame
+
+
+async def generate_placeholder_frames(camera_id: str):
+    """Generate placeholder frames for cameras with no video source."""
+    config = camera_configs.get(camera_id, {})
+    camera_name = config.get("name", camera_id)
+    
+    logger.warning(f"[VIDEO_STREAM] {camera_name}: Streaming placeholder (no video source)")
+    
+    placeholder = create_placeholder_frame(camera_id)
+    _, buffer = cv2.imencode('.jpg', placeholder)
+    frame_bytes = buffer.tobytes()
+    
+    while True:
+        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        await asyncio.sleep(1.0)  # 1 FPS for placeholder
+
+
+async def generate_frames(camera_id: str):
+    """
+    Generate MJPEG frames with adaptive error recovery.
+    Handles corrupted H.264 frames gracefully without crashing.
+    """
+    
+    cap = get_video_capture(camera_id)
+    
+    if not cap:
+        logger.warning(f"[VIDEO_STREAM] {camera_id}: No valid source, streaming placeholder")
+        async for frame_bytes in generate_placeholder_frames(camera_id):
+            yield frame_bytes
+        return
+    
+    consecutive_errors = 0
+    max_consecutive_errors = 10  # Reconnect after 10 failed reads
+    total_frames = 0
+    corrupted_frames = 0
+    last_reconnect = 0
+    
+    config = camera_configs.get(camera_id, {})
+    camera_name = config.get("name", camera_id)
+    zone = config.get("zone", "unknown")
+    
+    logger.info(f"[VIDEO_STREAM] Starting stream for {camera_name} ({camera_id})")
+    
+    try:
+        while True:
+            ret, frame = cap.read()
+            
+            # Frame read failed
+            if not ret:
+                consecutive_errors += 1
+                corrupted_frames += 1
+                
+                logger.warning(
+                    f"[VIDEO_STREAM] {camera_name}: Frame read failed "
+                    f"({consecutive_errors}/{max_consecutive_errors}) - "
+                    f"Total corrupted: {corrupted_frames}/{total_frames}"
+                )
+                
+                # Too many consecutive errors - reconnect
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error(
+                        f"[VIDEO_STREAM] {camera_name}: Too many errors, reconnecting... "
+                        f"(Reconnect #{last_reconnect + 1})"
+                    )
+                    
+                    cap.release()
+                    await asyncio.sleep(2)  # Wait before reconnect
+                    
+                    cap = get_video_capture(camera_id)
+                    if not cap:
+                        logger.error(f"[VIDEO_STREAM] {camera_name}: Reconnect failed, switching to placeholder")
+                        async for frame_bytes in generate_placeholder_frames(camera_id):
+                            yield frame_bytes
+                        return
+                    
+                    consecutive_errors = 0
+                    last_reconnect += 1
+                    logger.info(f"[VIDEO_STREAM] {camera_name}: Reconnected successfully")
+                
+                # Skip this corrupted frame and continue
+                await asyncio.sleep(0.033)  # ~30 FPS equivalent delay
+                continue
+            
+            # Validate frame integrity
+            if frame is None or frame.size == 0:
+                consecutive_errors += 1
+                corrupted_frames += 1
+                logger.warning(f"[VIDEO_STREAM] {camera_name}: Empty frame received")
+                await asyncio.sleep(0.033)
+                continue
+            
+            # Frame is valid - reset error counter
+            consecutive_errors = 0
+            total_frames += 1
+            
+            # Log statistics every 300 frames (~10 seconds at 30fps)
+            if total_frames % 300 == 0:
+                corruption_rate = (corrupted_frames / total_frames) * 100
+                logger.info(
+                    f"[VIDEO_STREAM] {camera_name}: "
+                    f"Frames: {total_frames}, "
+                    f"Corrupted: {corrupted_frames} ({corruption_rate:.2f}%), "
+                    f"Reconnects: {last_reconnect}"
+                )
+            
+            # Add zone overlay
+            frame = add_frame_overlay(frame, camera_id, zone)
+            
+            # Overlay latest detection boxes for this camera
+            for alert_data in reversed(alerts_history[-10:]):
+                event = alert_data.get("event", {})
+                if event.get("camera_id") == camera_id or event.get("zone") == zone:
+                    boxes = event.get("bounding_boxes", [])
+                    for box in boxes:
+                        if len(box) == 4:
+                            x1, y1, x2, y2 = [int(v) for v in box]
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                    break
+            
+            # Encode frame to JPEG
+            try:
+                encode_params = [
+                    cv2.IMWRITE_JPEG_QUALITY, 85,  # Good quality
+                    cv2.IMWRITE_JPEG_PROGRESSIVE, 1,  # Progressive encoding
+                    cv2.IMWRITE_JPEG_OPTIMIZE, 1  # Optimize file size
+                ]
+                
+                ret_encode, buffer = cv2.imencode('.jpg', frame, encode_params)
+                
+                if not ret_encode:
+                    logger.warning(f"[VIDEO_STREAM] {camera_name}: Frame encoding failed")
+                    continue
+                
+                # Yield MJPEG frame
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + 
+                    buffer.tobytes() + 
+                    b'\r\n'
+                )
+                
+            except Exception as e:
+                logger.error(f"[VIDEO_STREAM] {camera_name}: Encoding error: {str(e)}")
+                continue
+            
+            # Adaptive frame rate (prevents CPU overload)
+            await asyncio.sleep(0.033)  # ~30 FPS
+    
+    except asyncio.CancelledError:
+        logger.info(f"[VIDEO_STREAM] {camera_name}: Stream cancelled by client")
+    except Exception as e:
+        logger.error(f"[VIDEO_STREAM] {camera_name}: Unexpected error: {str(e)}", exc_info=True)
+    finally:
+        if cap:
+            cap.release()
+        logger.info(
+            f"[VIDEO_STREAM] {camera_name}: Stream closed. "
+            f"Stats - Total: {total_frames}, Corrupted: {corrupted_frames}, "
+            f"Reconnects: {last_reconnect}"
+        )
+
+
+def gen_video_frames(camera_id: str):
+    """Legacy synchronous wrapper for backward compatibility."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    async def _run():
+        async for frame in generate_frames(camera_id):
+            yield frame
+    
+    gen = _run()
+    try:
+        while True:
+            try:
+                frame = loop.run_until_complete(gen.__anext__())
+                yield frame
+            except StopAsyncIteration:
+                break
+    finally:
+        loop.close()
+
 
 
 def add_frame_overlay(frame, camera_id: str, zone: str):
@@ -1259,21 +1594,41 @@ def add_frame_overlay(frame, camera_id: str, zone: str):
 
 
 @app.get("/video/{camera_id}")
-def video_feed(camera_id: str):
-    """MJPEG stream for a specific camera."""
+async def video_feed(camera_id: str):
+    """MJPEG stream for a specific camera with enhanced error recovery."""
     return StreamingResponse(
-        gen_video_frames(camera_id),
+        generate_frames(camera_id),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
 
 
 # Legacy camera feed endpoint
 @app.get("/camera_feed")
-def camera_feed():
+async def camera_feed():
     """Legacy single camera feed endpoint."""
     return StreamingResponse(
-        gen_video_frames("cam_outgate"),
+        generate_frames("cam_outgate"),
         media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+@app.get("/snapshot/{filename}")
+def get_snapshot(filename: str):
+    """Serve snapshot image for WhatsApp media attachments."""
+    snapshot_path = _PROJECT_ROOT / "backend" / "snapshots" / filename
+    
+    if not snapshot_path.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Snapshot not found"}
+        )
+    
+    return FileResponse(
+        path=str(snapshot_path),
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600"
+        }
     )
 
 
@@ -1305,15 +1660,6 @@ async def receive_event(event: dict, request: Request = None):
         f"event_id={event_id} camera={camera_id} zone={zone} detected_by_zone={detected_by_zone} "
         f"event_type={event_type} confidence={confidence:.2f} boxes={boxes_count} ts={timestamp}"
     )
-<<<<<<< HEAD
-
-    if redis_client:
-        try:
-            redis_client.publish("events", json.dumps(event))
-        except Exception as exc:
-            logging.warning(f"Redis publish failed: {exc}")
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
     
     result = process_event(event)
     suspicion_score = float(result.get("suspicion_score", 0.0) or 0.0)
@@ -1327,17 +1673,31 @@ async def receive_event(event: dict, request: Request = None):
         incidents[incident_id] = {"event": event, "alert": alert}
         alerts_history.append({"event": event, "alert": alert})
 
-<<<<<<< HEAD
-        if JSON_STORE_ENABLED:
-            append_incident({
-                "incident_id": incident_id,
-                "event": event,
-                "alert": alert,
-                "created_at": time.time(),
-            })
+        # Insert incident into MongoDB
+        if DB_ENABLED:
+            incident_doc = {
+                "event_id": event_id,
+                "tenant_id": event.get("tenant_id", "default"),
+                "camera_id": camera_id,
+                "zone": zone,
+                "event_type": event_type,
+                "confidence": confidence,
+                "severity_score": suspicion_score,
+                "timestamp": timestamp,
+                "snapshot_path": event.get("snapshot_path"),
+                "summary": alert.get("summary") if alert else None,
+                "resolved": False,
+                "priority": priority,
+                "bounding_boxes": event.get("bounding_boxes", []),
+                "metadata": event.get("metadata", {}),
+            }
+            try:
+                db_id = await insert_incident(incident_doc)
+                if db_id:
+                    logging.info(f"[DB] Incident {event_id} stored in MongoDB (id={db_id})")
+            except Exception as e:
+                logging.error(f"[DB] Failed to store incident {event_id}: {e}")
 
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         logging.warning(
             "[EVENT_INCIDENT_DETECTED] "
             f"event_id={event_id} type={event_type} camera={camera_id} zone={zone} "
@@ -1352,15 +1712,6 @@ async def receive_event(event: dict, request: Request = None):
             f"[BROADCAST_QUEUED] event_id={event_id} type={event_type} "
             f"queue_size={alert_broadcast_queue.qsize()}"
         )
-<<<<<<< HEAD
-
-        if redis_client:
-            try:
-                redis_client.publish("alerts", json.dumps({"event": event, "alert": alert}))
-            except Exception as exc:
-                logging.warning(f"Redis publish failed: {exc}")
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         return {"received": True, "alert": alert, "incident_id": incident_id}
 
     logging.debug(
@@ -1509,18 +1860,6 @@ def list_incidents():
         "by_zone": by_zone,
     }
 
-<<<<<<< HEAD
-
-@app.delete("/incidents")
-def clear_incidents():
-    incidents.clear()
-    alerts_history.clear()
-    if JSON_STORE_ENABLED:
-        save_incidents([])
-    return {"success": True, "cleared": True}
-
-=======
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
 @app.get("/incident/{incident_id}/summary")
 async def get_llm_summary(incident_id: str):
@@ -1647,6 +1986,166 @@ async def debug_ping():
     }
 
 
+# ============================================================================
+# WHATSAPP TEST ENDPOINT
+# ============================================================================
+@app.get("/api/debug/whatsapp/test")
+async def test_whatsapp():
+    """
+    Test WhatsApp notification configuration and send a test message.
+    
+    Usage: curl http://localhost:8000/api/debug/whatsapp/test
+    
+    Returns configuration status and test result.
+    """
+    try:
+        from notifications.whatsapp import test_whatsapp_connection, is_whatsapp_configured
+        
+        result = test_whatsapp_connection()
+        
+        return {
+            "whatsapp_available": True,
+            "configured": result["configured"],
+            "enabled": result["enabled"],
+            "test_sent": result["test_sent"],
+            "error": result.get("error"),
+            "message": "Test message sent!" if result["test_sent"] else "Check configuration",
+        }
+    except ImportError:
+        return {
+            "whatsapp_available": False,
+            "configured": False,
+            "enabled": False,
+            "test_sent": False,
+            "error": "WhatsApp module not available. Install twilio: pip install twilio",
+            "message": "WhatsApp notifications not available",
+        }
+    except Exception as e:
+        return {
+            "whatsapp_available": True,
+            "configured": False,
+            "enabled": False,
+            "test_sent": False,
+            "error": str(e),
+            "message": "Error testing WhatsApp",
+        }
+
+
+@app.get("/api/debug/whatsapp/status")
+async def whatsapp_status():
+    """
+    Get WhatsApp notification configuration status (without sending a message).
+    
+    Usage: curl http://localhost:8000/api/debug/whatsapp/status
+    """
+    try:
+        from notifications.whatsapp import is_whatsapp_configured, _get_config
+        
+        config = _get_config()
+        
+        return {
+            "whatsapp_available": True,
+            "enabled": config["enabled"],
+            "configured": is_whatsapp_configured(),
+            "has_account_sid": bool(config["account_sid"]),
+            "has_auth_token": bool(config["auth_token"]),
+            "has_to_number": bool(config["to_number"]),
+            "from_number": config["from_number"],
+        }
+    except ImportError:
+        return {
+            "whatsapp_available": False,
+            "enabled": False,
+            "configured": False,
+            "error": "WhatsApp module not available",
+        }
+
+
+@app.get("/api/debug/whatsapp/test-alert/{camera_id}")
+async def test_whatsapp_alert(camera_id: str = "cam1"):
+    """
+    Send a test WhatsApp alert for a specific camera with cooldown tracking.
+    
+    Features:
+    - One alert per 30s per camera
+    - After 6+ alerts, 60s extended cooldown
+    - Tracks duplicate prevention
+    
+    Usage: curl http://localhost:8000/api/debug/whatsapp/test-alert/cam1
+    """
+    try:
+        from notifications.whatsapp import (
+            send_whatsapp_alert_nonblocking,
+            format_alert_message,
+            _whatsapp_cooldown,
+            is_whatsapp_configured
+        )
+        
+        if not is_whatsapp_configured():
+            return {
+                "success": False,
+                "error": "WhatsApp not configured",
+                "message": "Check TWILIO environment variables"
+            }
+        
+        # Get current state
+        alert_count = _whatsapp_cooldown.get_alert_count(camera_id)
+        is_threshold = _whatsapp_cooldown.is_threshold_active(camera_id)
+        remaining = _whatsapp_cooldown.get_remaining_cooldown(camera_id)
+        
+        # Try to send
+        test_message = format_alert_message(
+            zone="Test Zone",
+            event_type="Test Alert",
+            confidence=0.95,
+            camera_id=camera_id,
+            priority="high",
+            extra_info="This is a test message from the debug endpoint"
+        )
+        
+        send_whatsapp_alert_nonblocking(test_message, camera_id=camera_id)
+        
+        return {
+            "success": True,
+            "message": "Test alert queued for sending",
+            "camera_id": camera_id,
+            "alert_count": alert_count + 1,
+            "cooldown_active": remaining > 0,
+            "threshold_active": is_threshold,
+            "remaining_cooldown_seconds": round(remaining, 2),
+            "next_alert_allowed_in": round(remaining, 2) if remaining > 0 else 0,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Error sending test alert"
+        }
+
+
+@app.get("/api/debug/whatsapp/cooldown-status")
+async def whatsapp_cooldown_status():
+    """
+    Check cooldown status for all cameras.
+    
+    Usage: curl http://localhost:8000/api/debug/whatsapp/cooldown-status
+    """
+    try:
+        from notifications.whatsapp import _whatsapp_cooldown
+        
+        return {
+            "success": True,
+            "message": "Use /api/debug/whatsapp/test-alert/{camera_id} to test individual cameras",
+            "noted": "Alert counter resets after 60s of no activity per camera"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+
 @app.on_event("startup")
 async def startup_sync_cameras():
     logging.info("="*60)
@@ -1654,13 +2153,47 @@ async def startup_sync_cameras():
     logging.info("="*60)
     sync_camera_configs_from_test_videos(selected_module)
     logging.info(f"📦 Active module: {selected_module}")
-    logging.info(f"📹 Discovered {len(camera_configs)} cameras from test videos")
+    logging.info(f"📹 Discovered {len(camera_configs)} cameras")
+    
     for cam_id, cam in camera_configs.items():
-        logging.info(f"  • {cam.get('name')} [{cam_id}] - Zone: {cam.get('zone')} - Video: {cam.get('video_name')}")
+        # Get video source from multiple possible fields
+        video_source = cam.get('rtsp_url') or cam.get('video_path') or cam.get('source') or None
+        source_type = "NONE"
+        
+        if video_source:
+            if video_source.startswith('rtsp://'):
+                source_type = "RTSP"
+            elif video_source.startswith(('http://', 'https://')):
+                source_type = "HTTP"
+            else:
+                source_type = "FILE"
+        
+        status = "✅" if video_source else "❌"
+        
+        logging.info(
+            f"  {status} {cam.get('name', 'Unnamed')} [{cam_id}]\n"
+            f"     Zone: {cam.get('zone')}\n"
+            f"     Source Type: {source_type}\n"
+            f"     Source: {video_source or 'NOT CONFIGURED'}"
+        )
+    
     logging.info("="*60)
     logging.info("✓ Backend ready! Listening for events...")
     logging.info("="*60)
     logging.info(f"🔧 DEBUG: Test endpoint at http://localhost:8000/api/debug/ping")
+    logging.info(f"📱 WhatsApp: Status at http://localhost:8000/api/debug/whatsapp/status")
+    logging.info(f"📱 WhatsApp: Test at http://localhost:8000/api/debug/whatsapp/test")
+    
+    # Show warning for cameras without video sources
+    unconfigured = [cam_id for cam_id, cam in camera_configs.items() 
+                    if not (cam.get('rtsp_url') or cam.get('video_path') or cam.get('source'))]
+    
+    if unconfigured:
+        logging.warning("="*60)
+        logging.warning(f"⚠️  {len(unconfigured)} camera(s) missing video source!")
+        logging.warning("   Configure via: POST /api/camera/{camera_id}")
+        logging.warning("   Example payload: {\"rtsp_url\": \"rtsp://username:password@ip:port/stream\"}")
+        logging.warning("="*60)
 
 
 if __name__ == "__main__":

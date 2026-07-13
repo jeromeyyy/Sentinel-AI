@@ -3,30 +3,30 @@
     "id": "cam_school_accident_school",
     "name": "Accident School",
     "zone": "outgate",
-    "video_path": "C:\\Users\\joshua moses\\SecVidA\\backend\\test_videos\\school\\Accident_school.mp4",
+    "video_path": "uploaded_videos/Accident_school_1771537239760.mp4",
     "active": true,
     "source": "test_video",
-    "video_name": "Accident_school.mp4",
+    "video_name": "Accident_school_1771537239760.mp4",
     "module": "school"
   },
   {
-    "id": "cam_school_fight_school",
-    "name": "Fight School",
-    "zone": "corridor",
-    "video_path": "C:\\Users\\joshua moses\\SecVidA\\backend\\test_videos\\school\\fight_school.mp4",
+    "id": "cam_school_classroom",
+    "name": "Classroom Monitor",
+    "zone": "classroom",
+    "video_path": "uploaded_videos/classroom_1771536268419.mp4",
     "active": true,
     "source": "test_video",
-    "video_name": "fight_school.mp4",
+    "video_name": "classroom_1771536268419.mp4",
     "module": "school"
   },
   {
     "id": "cam_school_weapon_sch",
-    "name": "Weapon Sch",
+    "name": "Weapon Detection",
     "zone": "school_ground",
-    "video_path": "C:\\Users\\joshua moses\\SecVidA\\backend\\test_videos\\school\\Weapon_sch.mp4",
+    "video_path": "uploaded_videos/Weapons_2_sch_1772441778050.mp4",
     "active": true,
     "source": "test_video",
-    "video_name": "Weapon_sch.mp4",
+    "video_name": "Weapons_2_sch_1772441778050.mp4",
     "module": "school"
   }
 ]

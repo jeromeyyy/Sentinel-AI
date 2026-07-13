@@ -1,8 +1,26 @@
 // ─── API Configuration ───────────────────────────────────────────────────────
-export const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+// Backend URL (configured via NEXT_PUBLIC_API_BASE environment variable)
+// No hardcoded fallback - must be set in .env.local or .env.production
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+
+// Validate backend URL is configured
+if (typeof window !== 'undefined' && !API_BASE) {
+  console.error(
+    '❌ BACKEND URL NOT CONFIGURED!\n' +
+    'Please set NEXT_PUBLIC_API_BASE in .env.local\n' +
+    'Example: NEXT_PUBLIC_API_BASE=https://wholistic-unadvisedly-yosef.ngrok-free.dev'
+  );
+}
+
+export const BACKEND_URL = API_BASE || '';
 
 export const getWsUrl = () => {
   const base = BACKEND_URL;
+  if (!base) {
+    console.error('❌ Cannot generate WebSocket URL: BACKEND_URL is not configured');
+    return '';
+  }
   if (base.startsWith('https://')) {
     return base.replace('https://', 'wss://') + '/ws/alerts';
   }
@@ -90,7 +108,97 @@ export const ZONES = [
     model: 'yolov8m.pt',
     color: 'cyan'
   },
+  {
+    id: 'workspace',
+    label: 'Workspace',
+    description: 'Fire and smoke monitoring',
+    icon: 'Flame',
+    model: 'fire_smoke_model.pt',
+    color: 'orange',
+    runtimeZone: 'fire_only',
+  },
+  {
+    id: 'hallway',
+    label: 'Hallway',
+    description: 'Fire and smoke monitoring',
+    icon: 'Flame',
+    model: 'fire_smoke_model.pt',
+    color: 'orange',
+    runtimeZone: 'fire_only',
+  },
+  {
+    id: 'meeting_hall',
+    label: 'Meeting Hall',
+    description: 'Fire and smoke monitoring',
+    icon: 'Flame',
+    model: 'fire_smoke_model.pt',
+    color: 'orange',
+    runtimeZone: 'fire_only',
+  },
+  {
+    id: 'server_room',
+    label: 'Server Room',
+    description: 'Corridor behavior + safety monitoring',
+    icon: 'Server',
+    model: 'yolov8s.pt',
+    color: 'green',
+    runtimeZone: 'corridor',
+  },
+  {
+    id: 'door',
+    label: 'Door',
+    description: 'Corridor behavior + safety monitoring',
+    icon: 'DoorOpen',
+    model: 'yolov8s.pt',
+    color: 'green',
+    runtimeZone: 'corridor',
+  },
+  {
+    id: 'parking',
+    label: 'Parking',
+    description: 'Ground area behavior monitoring',
+    icon: 'SquareParking',
+    model: 'yolov8s.pt',
+    color: 'orange',
+    runtimeZone: 'school_ground',
+  },
+  {
+    id: 'main_gate',
+    label: 'Main Gate',
+    description: 'Vehicle and gate monitoring',
+    icon: 'Gate',
+    model: 'yolov8n.pt',
+    color: 'blue',
+    runtimeZone: 'outgate',
+  },
+  {
+    id: 'living_room',
+    label: 'Living Room',
+    description: 'Fire and smoke monitoring',
+    icon: 'Flame',
+    model: 'fire_smoke_model.pt',
+    color: 'orange',
+    runtimeZone: 'fire_only',
+  },
 ];
+
+export const MODULE_ZONE_IDS = {
+  school: ['outgate', 'corridor', 'school_ground', 'classroom'],
+  office: ['workspace', 'hallway', 'meeting_hall', 'server_room'],
+  home: ['door', 'parking', 'main_gate', 'living_room'],
+};
+
+export const getZonesForModule = (moduleId = 'school', options = {}) => {
+  const { includeAll = false } = options;
+  const zoneIds = MODULE_ZONE_IDS[moduleId] || MODULE_ZONE_IDS.school;
+
+  return ZONES.filter(zone => {
+    if (zone.id === 'all') {
+      return includeAll;
+    }
+    return zoneIds.includes(zone.id);
+  });
+};
 
 export const DEFAULT_CAMERAS = [
   { id: 'cam_outgate', name: 'Outgate Camera', zone: 'outgate', active: true, status: 'online' },

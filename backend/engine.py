@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from collections import defaultdict, deque
 from typing import Deque, Dict, List, Tuple
 
@@ -160,6 +161,48 @@ EVENT_CONFIG: Dict[str, Dict] = {
             "start_high_res_recording": True,
         },
     },
+    # 11) Fall detected (school ground)
+    "fall_detected": {
+        "window_sec": 4.0,
+        "min_frames": 1,
+        "threshold": 0.5,
+        "priority": "high",
+        "playbook": {
+            "scenario": "fall_detected",
+            "notify_nearest_staff": True,
+            "include_snapshot": True,
+            "push_live_camera_link": True,
+            "check_medical_attention": True,
+        },
+    },
+    # 12) Fire/smoke detected
+    "fire_smoke_detected": {
+        "window_sec": 3.0,
+        "min_frames": 1,
+        "threshold": 0.5,
+        "priority": "critical",
+        "playbook": {
+            "scenario": "fire_smoke",
+            "immediate_emergency_notification": True,
+            "auto_call_fire_service": True,
+            "open_evacuation_map": True,
+            "show_muster_point_guidance": True,
+        },
+    },
+    # 13) After-hours intrusion
+    "after_hours_intrusion": {
+        "window_sec": 5.0,
+        "min_frames": 1,
+        "threshold": 0.6,
+        "priority": "high",
+        "playbook": {
+            "scenario": "unauthorized_entry",
+            "notify_security": True,
+            "lock_gates_if_integrated": True,
+            "create_incident": True,
+            "start_high_fidelity_recording": True,
+        },
+    },
 }
 
 
@@ -177,11 +220,38 @@ def _make_key(event: Dict) -> Tuple[str, str, str]:
     )
 
 
+def _coerce_timestamp(raw_timestamp) -> float:
+    if raw_timestamp is None:
+        return time.time()
+
+    if isinstance(raw_timestamp, (int, float)):
+        return float(raw_timestamp)
+
+    if isinstance(raw_timestamp, str):
+        text = raw_timestamp.strip()
+        if not text:
+            return time.time()
+
+        try:
+            return float(text)
+        except ValueError:
+            pass
+
+        try:
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            return datetime.fromisoformat(text).timestamp()
+        except ValueError:
+            return time.time()
+
+    return time.time()
+
+
 def _update_state(key: Tuple[str, str, str], event: Dict, window_sec: float) -> List[Dict]:
     """
     Append the current frame to the buffer and prune anything outside `window_sec`.
     """
-    now = float(event.get("timestamp", time.time()))
+    now = _coerce_timestamp(event.get("timestamp"))
     buf = _recent_events[key]
     buf.append(
         {
@@ -232,10 +302,9 @@ def process_event(event: Dict) -> Dict:
     # Normal incident decision
     is_incident = bool(enough_frames and over_threshold)
 
-    # Demo override: if DEMO_MODE=1, make it much easier to
-    # generate incidents so that test footage produces visible
-    # alerts quickly in the UI.
-    if os.getenv("DEMO_MODE", "0") == "1":
+    # Demo override is opt-in so normal runs do not auto-promote
+    # single detections into incidents.
+    if os.getenv("DEMO_MODE", "0") == "1" and os.getenv("DEMO_AUTO_INCIDENTS", "0") == "1":
         # Any reasonably confident detection from the worker
         # becomes an incident, regardless of multi-frame checks.
         if float(event.get("confidence", 0.0)) >= 0.4:

@@ -39,18 +39,18 @@ class CorridorProcessor(BaseZoneProcessor):
     MODEL_NAME = "yolov8s.pt"
 
     # ── Crowd detection ──────────────────────────────────────────────
-    MIN_CROWD_SIZE             = 4
-    CLUSTER_DISTANCE_THRESHOLD = 160.0
-    MIN_CROWD_DURATION         = 2.0    # seconds
+    MIN_CROWD_SIZE             = 3      # Lowered from 4 for testing
+    CLUSTER_DISTANCE_THRESHOLD = 200.0  # Increased from 160 for easier triggers
+    MIN_CROWD_DURATION         = 1.0    # Lowered from 2.0 seconds
 
     # ── Fight detection (bbox fallback) ──────────────────────────────
-    FIGHT_OVERLAP_THRESHOLD = 0.10
-    FIGHT_MOTION_THRESHOLD  = 40.0
-    MIN_FIGHT_FRAMES        = 3
+    FIGHT_OVERLAP_THRESHOLD = 0.05   # Lowered from 0.10 for easier detection
+    FIGHT_MOTION_THRESHOLD  = 25.0   # Lowered from 40.0
+    MIN_FIGHT_FRAMES        = 2      # Lowered from 3
 
     # ── Fight detection (pose-based) ─────────────────────────────────
-    POSE_WRIST_SPEED_THRESHOLD  = 25.0
-    POSE_PROXIMITY_THRESHOLD    = 130
+    POSE_WRIST_SPEED_THRESHOLD  = 15.0  # Lowered from 25.0
+    POSE_PROXIMITY_THRESHOLD    = 180   # Increased from 130
 
     def __init__(self, camera_id: str):
         super().__init__(camera_id)
@@ -77,11 +77,11 @@ class CorridorProcessor(BaseZoneProcessor):
         events:  List[DetectionEvent] = []
 
         # Priority order: weapon > fire/smoke > fight > crowd
-        weapon_event = self._process_shared_weapons(shared, persons)
+        weapon_event = self._process_shared_weapons(shared, tracked_objects, persons)
         if weapon_event:
             events.append(weapon_event)
 
-        fire_event = self._process_shared_fire_smoke(shared)
+        fire_event = self._process_shared_fire_smoke(shared, frame)
         if fire_event:
             events.append(fire_event)
 
@@ -104,13 +104,10 @@ class CorridorProcessor(BaseZoneProcessor):
         persons:  List[TrackedObject],
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
-<<<<<<< HEAD
-=======
         # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
         if not self._can_emit_event("crowd_formation"):
             self._update_suspicion("crowd_formation", False)
             return None
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if len(persons) < self.MIN_CROWD_SIZE:
             self._crowd_start_time = None
@@ -164,13 +161,10 @@ class CorridorProcessor(BaseZoneProcessor):
         poses:    list,
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
-<<<<<<< HEAD
-=======
         # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
         if not self._can_emit_event("fight"):
             self._update_suspicion("fight", False)
             return None
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if len(persons) < 2:
             self._fight_frame_count = 0

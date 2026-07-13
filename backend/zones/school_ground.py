@@ -44,27 +44,27 @@ class SchoolGroundProcessor(BaseZoneProcessor):
     MODEL_NAME = "yolov8s.pt"
 
     # ── Crowd ────────────────────────────────────────────────────────
-    MIN_CROWD_SIZE             = 4
-    CLUSTER_DISTANCE_THRESHOLD = 200.0
-    MIN_CROWD_DURATION         = 2.5
+    MIN_CROWD_SIZE             = 3       # Lowered from 4 for testing
+    CLUSTER_DISTANCE_THRESHOLD = 250.0   # Increased from 200 for easier triggers
+    MIN_CROWD_DURATION         = 1.5     # Lowered from 2.5 seconds
 
     # ── Fight (bbox fallback) ────────────────────────────────────────
-    FIGHT_OVERLAP_THRESHOLD = 0.08
-    FIGHT_MOTION_THRESHOLD  = 40.0
-    MIN_FIGHT_FRAMES        = 3
+    FIGHT_OVERLAP_THRESHOLD = 0.05    # Lowered from 0.08
+    FIGHT_MOTION_THRESHOLD  = 25.0    # Lowered from 40.0
+    MIN_FIGHT_FRAMES        = 2       # Lowered from 3
 
     # ── Fight (pose) ─────────────────────────────────────────────────
-    POSE_WRIST_SPEED_THRESHOLD = 25.0
-    POSE_PROXIMITY_THRESHOLD   = 140
+    POSE_WRIST_SPEED_THRESHOLD = 15.0   # Lowered from 25.0
+    POSE_PROXIMITY_THRESHOLD   = 180    # Increased from 140
 
     # ── Fall detection ───────────────────────────────────────────────
     # A person is considered fallen when:
     #   - bbox aspect ratio width/height > FALL_ASPECT_RATIO_THRESHOLD  (lying flat)
     #   - OR pose hip-shoulder vertical angle is near horizontal
-    FALL_ASPECT_RATIO_THRESHOLD = 1.4    # width > 1.4× height → likely lying
-    FALL_POSE_ANGLE_THRESHOLD   = 45.0   # degrees from vertical
-    MIN_FALL_FRAMES             = 3
-    FALL_MOTION_COOLDOWN        = 1.5    # don't trigger if person still moving fast
+    FALL_ASPECT_RATIO_THRESHOLD = 1.2    # Lowered from 1.4 for easier detection
+    FALL_POSE_ANGLE_THRESHOLD   = 55.0   # Increased from 45.0 degrees
+    MIN_FALL_FRAMES             = 2      # Lowered from 3
+    FALL_MOTION_COOLDOWN        = 0.8    # Lowered from 1.5
 
     # ── COCO weapon (fallback) ───────────────────────────────────────
     COCO_WEAPON_CONFIDENCE = 0.30
@@ -95,23 +95,16 @@ class SchoolGroundProcessor(BaseZoneProcessor):
         self.temporal_buffer.add_frame(tracked_objects, metadata.timestamp)
 
         persons = [o for o in tracked_objects if o.class_name == "person"]
-        # COCO knife/scissors from zone model (fallback when weapon_model.pt missing)
-        coco_weapons = [o for o in tracked_objects if o.class_name in COCO_WEAPON_CLASSES]
 
         events: List[DetectionEvent] = []
 
-        # 1. Weapon — shared model (returns None if model not loaded)
-        weapon_event = self._process_shared_weapons(shared, persons)
+        # 1. Weapon — shared model with zone-model COCO fallback
+        weapon_event = self._process_shared_weapons(shared, tracked_objects, persons)
         if weapon_event:
             events.append(weapon_event)
-        elif not weapon_event and coco_weapons:
-            # Fallback: use COCO knife/scissors from zone model
-            coco_event = self._detect_coco_weapon(coco_weapons, persons)
-            if coco_event:
-                events.append(coco_event)
 
         # 2. Fire / smoke
-        fire_event = self._process_shared_fire_smoke(shared)
+        fire_event = self._process_shared_fire_smoke(shared, frame)
         if fire_event:
             events.append(fire_event)
 
@@ -141,13 +134,10 @@ class SchoolGroundProcessor(BaseZoneProcessor):
         persons:  List[TrackedObject],
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
-<<<<<<< HEAD
-=======
         # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
         if not self._can_emit_event("crowd_formation"):
             self._update_suspicion("crowd_formation", False)
             return None
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if len(persons) < self.MIN_CROWD_SIZE:
             self._crowd_start_time = None
@@ -201,13 +191,10 @@ class SchoolGroundProcessor(BaseZoneProcessor):
         poses:    list,
         metadata: FrameMetadata,
     ) -> Optional[DetectionEvent]:
-<<<<<<< HEAD
-=======
         # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
         if not self._can_emit_event("fight"):
             self._update_suspicion("fight", False)
             return None
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
 
         if len(persons) < 2:
             self._fight_frame_count = 0
@@ -335,14 +322,11 @@ class SchoolGroundProcessor(BaseZoneProcessor):
         1. Pose-based: hip-shoulder angle near horizontal (< FALL_POSE_ANGLE_THRESHOLD)
         2. Bbox aspect ratio fallback: width > height × threshold
         """
-<<<<<<< HEAD
-=======
         # FRAME-LEVEL COOLDOWN: Prevent re-triggering within cooldown window
         if not self._can_emit_event("fall_detected"):
             self._update_suspicion("fall_detected", False)
             return None
         
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261
         if not persons:
             self._fall_frame_count = 0
             self._update_suspicion("fall_detected", False)

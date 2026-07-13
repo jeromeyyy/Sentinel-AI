@@ -79,7 +79,7 @@ ZONE_MODEL_CONFIGS: Dict[str, ZoneModelConfig] = {
     "outgate": ZoneModelConfig(
         model_file="yolov8n.pt",
         confidence_threshold=0.5,
-        classes=[0, 2, 3, 5, 7],           # person + all vehicles
+        classes=[0, 2, 3, 5, 7, 43, 76],    # person + all vehicles + COCO weapon fallback
         description="Vehicle + person detection (speed priority)",
     ),
     "corridor": ZoneModelConfig(
@@ -97,8 +97,14 @@ ZONE_MODEL_CONFIGS: Dict[str, ZoneModelConfig] = {
     "classroom": ZoneModelConfig(
         model_file="yolov8m.pt",
         confidence_threshold=0.4,
-        classes=[0, 67],                     # person + cell phone
-        description="Person + phone detection (accuracy priority)",
+        classes=[0, 43, 67, 76],             # person + COCO weapon fallback + cell phone
+        description="Person + phone detection with COCO weapon fallback (accuracy priority)",
+    ),
+    "fire_only": ZoneModelConfig(
+        model_file="fire_smoke_model.pt",
+        confidence_threshold=0.45,
+        classes=[0, 1],
+        description="Fire/smoke dedicated zone using fire_smoke_model.pt",
     ),
 }
 

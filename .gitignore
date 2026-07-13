@@ -31,8 +31,4 @@ Desktop.ini
 # Keep example files
 !.env.example
 !backend/.env.example
-<<<<<<< HEAD
 !frontend/.env.example
-=======
-!frontend/.env.examplebackend/uploaded_videos/
->>>>>>> 4d997c896515f1205359a1231ddab36408c13261

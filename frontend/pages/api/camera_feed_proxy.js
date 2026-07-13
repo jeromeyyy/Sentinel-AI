@@ -4,8 +4,13 @@ export default async function handler(req, res) {
   // to simulate a live feed.
   
   // ─── API Configuration ───────────────────────────────────────────────────────
-  // For local development, uncomment: const backendUrl = 'http://localhost:8000/camera_feed';
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE;
+  
+  if (!apiBase) {
+    res.status(500).json({ error: 'Backend URL not configured (NEXT_PUBLIC_API_BASE)' });
+    return;
+  }
+  
   const backendUrl = `${apiBase}/camera_feed`;
 
   try {

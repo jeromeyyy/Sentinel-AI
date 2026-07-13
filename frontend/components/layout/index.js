@@ -54,9 +54,16 @@ export function DashboardLayout({
 
       {/* Main Content Area */}
       <div className={cn(
-        'min-h-screen transition-all duration-300',
+        'min-h-screen transition-all duration-300 relative',
         sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
       )}>
+        {/* Gradient Background Effects */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-purple-500/5 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-blue-500/3 via-transparent to-purple-500/3 rounded-full blur-3xl" />
+        </div>
+
         <TopBar
           title={title}
           subtitle={subtitle}
@@ -68,7 +75,7 @@ export function DashboardLayout({
           {topBarActions}
         </TopBar>
 
-        <main className="p-6">
+        <main className="relative z-10 p-6">
           {children}
         </main>
       </div>

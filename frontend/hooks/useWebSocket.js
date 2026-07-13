@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { getWsUrl } from '../lib/constants';
-import { getAlertKey, getCameraId, getEventType } from '../lib/utils';
+import { getWsUrl } from '@/lib/constants';
+import { getAlertKey, getCameraId, getEventType } from '@/lib/utils';
 
 export function useWebSocket() {
   const [status, setStatus] = useState('connecting');

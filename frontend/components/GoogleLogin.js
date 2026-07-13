@@ -4,7 +4,7 @@ import { useState, useEffect, createContext, useContext } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2, LogOut } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { BACKEND_URL } from '../lib/constants';
+import { BACKEND_URL } from '@/lib/constants';
 
 // ============================================================================
 // AUTH CONTEXT
@@ -61,6 +61,7 @@ export function AuthProvider({ children }) {
         const res = await fetch(`${backendUrl}/auth/verify`, {
           headers: {
             'Authorization': `Bearer ${token}`,
+            'ngrok-skip-browser-warning': 'true', // Bypass ngrok browser warning page
           },
         });
         
@@ -117,7 +118,9 @@ export function useAuth() {
 // ============================================================================
 // GOOGLE LOGIN BUTTON
 // ============================================================================
-export default function GoogleLoginButton({ 
+// GOOGLE LOGIN BUTTON COMPONENT
+// ============================================================================
+function GoogleLoginButtonComponent({ 
   className,
   size = 'default',
   fullWidth = false,
@@ -243,5 +246,10 @@ export function AuthStatus() {
     );
   }
 
-  return <GoogleLoginButton size="sm" />;
+  return <GoogleLoginButtonComponent size="sm" />;
 }
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+export default GoogleLoginButtonComponent;
