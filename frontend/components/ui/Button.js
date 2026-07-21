@@ -16,8 +16,8 @@ const buttonVariants = cva(
         ghost: "hover:bg-muted hover:text-foreground text-muted-foreground",
         link: "text-blue-500 underline-offset-4 hover:underline",
         primary: "bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:opacity-90 shadow-lg shadow-blue-500/25", // Mapping legacy variant
-        success: "bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30",
-        danger: "bg-red-500/20 border border-red-500/50 text-red-400 hover:bg-red-500/30",
+        success: "bg-success/20 border border-success/50 text-success hover:bg-success/30",
+        danger: "bg-danger/20 border border-danger/50 text-danger hover:bg-danger/30",
       },
       size: {
         default: "h-10 px-4 py-2",

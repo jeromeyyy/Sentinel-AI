@@ -14,11 +14,14 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     setMounted(true);
     const stored = localStorage.getItem('sentinelai_theme');
-    if (stored) {
-      setTheme(stored);
-    } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-      setTheme('light');
-    }
+    
+    // Default to dark mode as light mode is not fully supported yet
+    let initialTheme = 'dark';
+    
+    // If we want to support light mode later, we can re-enable this:
+    // if (stored === 'light') initialTheme = 'light';
+    
+    setTheme(initialTheme);
   }, []);
 
   useEffect(() => {

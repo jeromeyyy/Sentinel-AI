@@ -4,6 +4,7 @@ module.exports = {
     "./components/**/*.{js,ts,jsx,tsx}",
     "./contexts/**/*.{js,ts,jsx,tsx}",
     "./hooks/**/*.{js,ts,jsx,tsx}",
+    "./lib/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
   theme: {
@@ -13,6 +14,7 @@ module.exports = {
         background: 'var(--bg-primary)',
         foreground: 'var(--text-primary)',
         card: 'var(--bg-secondary)',
+        'card-foreground': 'var(--text-primary)',
         'card-hover': 'var(--bg-tertiary)',
         muted: 'var(--bg-tertiary)',
         'muted-foreground': 'var(--text-secondary)',

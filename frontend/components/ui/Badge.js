@@ -13,13 +13,13 @@ const badgeVariants = cva(
         destructive: "border-transparent bg-red-500/20 text-red-400 hover:bg-red-500/30 border-red-500/50",
         outline: "text-foreground border-border",
         // Legacy support
-        critical: "border-red-500/50 bg-red-500/20 text-red-400",
-        high: "border-orange-500/50 bg-orange-500/20 text-orange-400",
-        medium: "border-yellow-500/50 bg-yellow-500/20 text-yellow-400",
-        low: "border-blue-500/50 bg-blue-500/20 text-blue-400",
-        success: "border-green-500/50 bg-green-500/20 text-green-400",
-        online: "border-transparent bg-green-500/20 text-green-400",
-        offline: "border-transparent bg-red-500/20 text-red-400",
+        critical: "border-critical/50 bg-critical/20 text-critical",
+        high: "border-high/50 bg-high/20 text-high",
+        medium: "border-medium/50 bg-medium/20 text-medium",
+        low: "border-low/50 bg-low/20 text-low",
+        success: "border-success/50 bg-success/20 text-success",
+        online: "border-transparent bg-success/20 text-success",
+        offline: "border-transparent bg-critical/20 text-critical",
       },
       size: {
         default: "px-2.5 py-0.5 text-xs",
@@ -42,11 +42,11 @@ function Badge({ className, variant, size, dot, pulse, children, ...props }) {
         <span
           className={cn(
             "w-1.5 h-1.5 rounded-full mr-1.5",
-            variant === "online" || variant === "success" ? "bg-green-500" :
-            variant === "offline" || variant === "critical" || variant === "destructive" ? "bg-red-500" :
-            variant === "high" ? "bg-orange-500" :
-            variant === "medium" ? "bg-yellow-500" :
-            variant === "low" ? "bg-blue-500" : "bg-current",
+            variant === "online" || variant === "success" ? "bg-success" :
+            variant === "offline" || variant === "critical" || variant === "destructive" ? "bg-critical" :
+            variant === "high" ? "bg-high" :
+            variant === "medium" ? "bg-medium" :
+            variant === "low" ? "bg-low" : "bg-current",
             pulse && "animate-pulse"
           )}
         />
