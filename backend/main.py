@@ -675,41 +675,43 @@ async def google_auth_redirect():
 
 
 @app.get("/auth/google/login")
-async def google_login_redirect():
+async def google_login_redirect(request: Request):
     """Direct redirect to Google OAuth (for browser navigation)."""
     if not AUTH_ENABLED:
         return JSONResponse({"error": "Auth is disabled"}, status_code=400)
     from fastapi.responses import RedirectResponse
-    auth_url = get_google_auth_url()
+    auth_url = get_google_auth_url(request=request)
     return RedirectResponse(url=auth_url)
 
 
 @app.get("/auth/google/callback")
-async def google_auth_callback(code: Optional[str] = None, error: Optional[str] = None, state: Optional[str] = None):
+async def google_auth_callback(request: Request, code: Optional[str] = None, error: Optional[str] = None, state: Optional[str] = None):
     """Handle Google OAuth callback and issue JWT."""
     from fastapi.responses import RedirectResponse
+    
+    frontend_target = os.getenv("FRONTEND_URL", "https://sentinel-ai-live.vercel.app")
     
     if not AUTH_ENABLED:
         return JSONResponse({"error": "Auth is disabled"}, status_code=400)
     
     if error:
-        return RedirectResponse(url=f"{FRONTEND_URL}?auth_error={error}")
+        return RedirectResponse(url=f"{frontend_target}?auth_error={error}")
     
     if not code:
-        return RedirectResponse(url=f"{FRONTEND_URL}?auth_error=no_code")
+        return RedirectResponse(url=f"{frontend_target}?auth_error=no_code")
     
     # Validate OAuth CSRF state token
     if state and not validate_oauth_state(state):
         logging.warning("[AUTH] Invalid or expired OAuth state token")
-        return RedirectResponse(url=f"{FRONTEND_URL}?auth_error=invalid_state")
+        return RedirectResponse(url=f"{frontend_target}?auth_error=invalid_state")
     
     try:
         # Exchange code for tokens
-        tokens = await exchange_code_for_tokens(code)
+        tokens = await exchange_code_for_tokens(code, request=request)
         access_token = tokens.get("access_token")
         
         if not access_token:
-            return RedirectResponse(url=f"{FRONTEND_URL}?auth_error=no_access_token")
+            return RedirectResponse(url=f"{frontend_target}?auth_error=no_access_token")
         
         # Get user info from Google
         google_user = await get_google_user_info(access_token)
@@ -722,11 +724,11 @@ async def google_auth_callback(code: Optional[str] = None, error: Optional[str] 
         
         # Redirect to frontend with token
         return RedirectResponse(
-            url=f"{FRONTEND_URL}?token={jwt_token}&user={user.name}"
+            url=f"{frontend_target}/monitor?token={jwt_token}&user={user.name}"
         )
     except Exception as e:
         logging.error(f"OAuth callback error: {e}")
-        return RedirectResponse(url=f"{FRONTEND_URL}?auth_error=callback_failed")
+        return RedirectResponse(url=f"{frontend_target}?auth_error=callback_failed")
 
 
 @app.get("/auth/me")

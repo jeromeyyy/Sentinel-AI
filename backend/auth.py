@@ -41,8 +41,15 @@ def _get_google_client_id() -> str:
 def _get_google_client_secret() -> str:
     return os.getenv("GOOGLE_CLIENT_SECRET", "")
 
-def _get_google_redirect_uri() -> str:
-    return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
+def _get_google_redirect_uri(request: Optional[Request] = None) -> str:
+    env_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    if env_uri:
+        return env_uri
+    if request:
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost:8000"))
+        return f"{proto}://{host}/auth/google/callback"
+    return "http://localhost:8000/auth/google/callback"
 
 GOOGLE_CLIENT_ID = _get_google_client_id()
 GOOGLE_CLIENT_SECRET = _get_google_client_secret()
@@ -128,11 +135,11 @@ def validate_oauth_state(state: Optional[str]) -> bool:
         return True
     return False
 
-def get_google_auth_url(state: Optional[str] = None) -> str:
+def get_google_auth_url(state: Optional[str] = None, request: Optional[Request] = None) -> str:
     """Generate Google OAuth authorization URL."""
     state_token = state or generate_oauth_state()
     client_id = _get_google_client_id()
-    redirect_uri = _get_google_redirect_uri()
+    redirect_uri = _get_google_redirect_uri(request)
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -146,7 +153,7 @@ def get_google_auth_url(state: Optional[str] = None) -> str:
     query = "&".join(f"{k}={v}" for k, v in params.items())
     return f"{GOOGLE_AUTH_URL}?{query}"
 
-async def exchange_code_for_tokens(code: str) -> Dict:
+async def exchange_code_for_tokens(code: str, request: Optional[Request] = None) -> Dict:
     """Exchange authorization code for tokens."""
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
@@ -156,7 +163,7 @@ async def exchange_code_for_tokens(code: str) -> Dict:
                 "client_secret": _get_google_client_secret(),
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": _get_google_redirect_uri(),
+                "redirect_uri": _get_google_redirect_uri(request),
             },
         )
         
