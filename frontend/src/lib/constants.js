@@ -3,10 +3,10 @@
 // No hardcoded fallback - must be set in .env.local or .env.production
 
 const DEFAULT_API_BASE = process.env.NODE_ENV === 'production' 
-  ? 'https://cctvanalysis-edfn.onrender.com'
+  ? 'https://sentinelai-backend-c81f.onrender.com'
   : 'http://localhost:8000';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || DEFAULT_API_BASE;
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_BASE || DEFAULT_API_BASE;
 
 export const BACKEND_URL = API_BASE;
 
