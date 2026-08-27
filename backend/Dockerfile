@@ -1,33 +1,27 @@
-# SentinelAI Backend Dockerfile for Render
+﻿# Production Dockerfile for SentinelAI Backend (FastAPI + YOLOv8 + OpenCV)
 FROM python:3.10-slim
 
-# Set working directory
-WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies for OpenCV
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libgl1 \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+    libgomp1 \
+    ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching
-COPY requirements.txt .
+WORKDIR /app
 
-# Install Python dependencies
+COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend application
-COPY . .
+COPY backend /app/backend
 
-# Expose port (Render uses PORT env var)
-EXPOSE 10000
+WORKDIR /app/backend
 
-# Default environment variables
-ENV PORT=10000
-ENV MODULE=school
+EXPOSE 8000
 
-# Run the application
-CMD ["sh", "start.sh"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

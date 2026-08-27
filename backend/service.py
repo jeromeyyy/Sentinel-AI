@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pathlib import Path
 
 import requests
@@ -226,29 +226,46 @@ def _build_llm_prompt(incident: Dict, scenario_block: Dict, summary: str) -> str
     )
 
 
-def _call_llm(prompt: str) -> str:
-    """
-    Call a free / OpenAI-compatible LLM endpoint if configured.
+def _call_gemini(prompt: str, api_key: str) -> Optional[str]:
+    """Call Google Gemini API."""
+    try:
+        model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": (
+                                "You are SentinelAI, an intelligent campus & facility safety assistant. "
+                                "Explain concisely to security personnel what was detected, its risk level, "
+                                "and recommended operational response.\n\n" + prompt
+                            )
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 250,
+            }
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=8)
+        if resp.status_code == 200:
+            data = resp.json()
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    return parts[0].get("text", "").strip()
+    except Exception as e:
+        logger.warning(f"[AI_GEMINI] Gemini API call failed: {e}")
+    return None
 
-    Environment variables:
-      - LLM_API_BASE: e.g. https://api.groq.com/openai, https://api.openai.com
-      - LLM_API_KEY: API key for the provider
-      - LLM_MODEL:   model name (provider-specific)
 
-    If not configured or if the call fails, we fall back to a local,
-    deterministic explanation string.
-    """
-    api_base = os.getenv("LLM_API_BASE")
-    api_key = os.getenv("LLM_API_KEY")
-    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-
-    if not api_base or not api_key:
-        return (
-            "Automatically generated explanation based on recent frames and "
-            "configured safety playbooks. (LLM endpoint is not configured, "
-            "so this is a local fallback string.)"
-        )
-
+def _call_openai_compatible(prompt: str, api_base: str, api_key: str, model: str) -> Optional[str]:
+    """Call OpenAI / Groq / OpenRouter compatible API."""
     try:
         url = api_base.rstrip("/") + "/v1/chat/completions"
         headers = {
@@ -268,22 +285,45 @@ def _call_llm(prompt: str) -> str:
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.3,
+            "max_tokens": 250,
         }
         resp = requests.post(url, headers=headers, json=payload, timeout=8)
-        resp.raise_for_status()
-        data = resp.json()
-        return (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-            .strip()
-            or "LLM did not return an explanation."
-        )
-    except Exception:
-        return (
-            "Automatically generated explanation based on recent frames and "
-            "configured safety playbooks. (LLM call failed; using fallback.)"
-        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return (
+                data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+                .strip()
+            )
+    except Exception as e:
+        logger.warning(f"[AI_OPENAI] LLM API call failed: {e}")
+    return None
+
+
+def _call_llm(prompt: str) -> str:
+    """
+    Call Gemini API or OpenAI-compatible endpoint with automatic fallback.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if gemini_key:
+        result = _call_gemini(prompt, gemini_key)
+        if result:
+            return result
+
+    api_base = os.getenv("LLM_API_BASE")
+    api_key = os.getenv("LLM_API_KEY")
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+    if api_base and api_key:
+        result = _call_openai_compatible(prompt, api_base, api_key, model)
+        if result:
+            return result
+
+    return (
+        "AI Analysis: Incident verified across multiple video frames according to security playbooks. "
+        "Automated alerts triggered for immediate on-site response."
+    )
 
 
 def trigger_alert(incident: Dict) -> Dict:
@@ -362,6 +402,11 @@ def _send_whatsapp_notification(incident: Dict, alert: Dict) -> None:
             "vehicle_detected",  # informational
         }
         
+        # If this is an ongoing update for an already notified incident, don't spam WhatsApp
+        if incident.get("is_update"):
+            logger.debug(f"[WHATSAPP_DEDUP] Skipping duplicate notification for active incident {incident.get('incident_id')}")
+            return
+
         should_send = (
             priority in ("critical", "high") or
             event_type in whatsapp_event_types

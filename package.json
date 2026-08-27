@@ -1,0 +1,12 @@
+{
+  "name": "sentinel-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SentinelAI - AI-Powered Security & Threat Detection System",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend start",
+    "lint": "npm --prefix frontend run lint"
+  }
+}

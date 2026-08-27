@@ -1,0 +1,38 @@
+﻿version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: sentinelai-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - MONGO_URL=${MONGO_URL:-mongodb://localhost:27017/sentinelai}
+      - JWT_SECRET=${JWT_SECRET:-sentinelai_super_secret_jwt_key_2026}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_FROM=${TWILIO_WHATSAPP_FROM}
+      - NOTIFICATION_PHONE_NUMBER=${NOTIFICATION_PHONE_NUMBER}
+    volumes:
+      - ./backend/uploaded_videos:/app/backend/uploaded_videos
+      - ./backend/models:/app/backend/models
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: sentinelai-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:8000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/alerts
+    depends_on:
+      - backend

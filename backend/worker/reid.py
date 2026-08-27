@@ -1,22 +1,10 @@
 """
-Cross-Camera Re-Identification Manager for SentinelAI
+Global Person Tracking & Cross-Camera Re-Identification Engine
 
-Assigns a global_person_id to tracked objects across multiple cameras.
-
-Approach:
-- Appearance embedding: extract a colour histogram + spatial feature vector
-  from each person crop (lightweight, no extra model required).
-- Optional: if torchreid or a dedicated Re-ID model is available, use that
-  for much better accuracy.
-- Gallery: stores (embedding, camera_id, last_seen) per global_person_id.
-- Matching: cosine similarity between current embedding and gallery.
-- If similarity > threshold → same person → reuse global_person_id.
-- If no match → assign new global_person_id.
-
-Cross-camera events:
-- When the same global_person_id is seen in two different cameras within
-  a configurable time window, enrich events with cross_camera=True and
-  the list of cameras the person was seen in.
+Maps local camera track IDs to system-wide Global Person IDs (e.g., P-0042) using:
+1. Appearance Embedding (color histogram signatures & spatial feature distribution)
+2. Camera Topology Graph (spatial adjacency & valid transition timing windows)
+3. ID Switch Protection & Occlusion Buffering
 """
 
 import os
@@ -24,357 +12,244 @@ import time
 import logging
 import threading
 import numpy as np
-from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Set, Any
+from dataclasses import dataclass, field
 
-# ── Config ────────────────────────────────────────────────────────────────────
-REID_SIMILARITY_THRESHOLD = float(os.getenv("REID_SIMILARITY_THRESHOLD", "0.65"))
-REID_GALLERY_TTL          = float(os.getenv("REID_GALLERY_TTL",          "120"))   # seconds
-REID_CROSS_CAMERA_WINDOW  = float(os.getenv("REID_CROSS_CAMERA_WINDOW",  "30"))    # seconds
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# CAMERA TOPOLOGY GRAPH
+# ============================================================================
+
+@dataclass
+class CameraTransition:
+    from_camera: str
+    to_camera: str
+    min_time_seconds: float
+    max_time_seconds: float
+
+
+class CameraTopology:
+    """
+    Maintains spatial connections between cameras to validate cross-camera transitions.
+    Prevents impossible teleportation between distant non-adjacent cameras.
+    """
+
+    def __init__(self):
+        # (from_cam, to_cam) -> (min_time, max_time)
+        self._transitions: Dict[Tuple[str, str], Tuple[float, float]] = {}
+        self._default_min_time = 1.0
+        self._default_max_time = 60.0
+
+    def add_connection(self, from_cam: str, to_cam: str, min_time: float = 1.0, max_time: float = 45.0):
+        self._transitions[(from_cam, to_cam)] = (min_time, max_time)
+        self._transitions[(to_cam, from_cam)] = (min_time, max_time)
+
+    def is_transition_valid(self, from_cam: str, to_cam: str, elapsed_seconds: float) -> bool:
+        if from_cam == to_cam:
+            return True  # Same camera re-entry / occlusion recovery
+
+        if (from_cam, to_cam) in self._transitions:
+            min_t, max_t = self._transitions[(from_cam, to_cam)]
+            return min_t <= elapsed_seconds <= max_t
+
+        # If no explicit topology is defined, allow default reasonable window
+        return self._default_min_time <= elapsed_seconds <= self._default_max_time
 
 
 # ============================================================================
-# EMBEDDING EXTRACTOR
+# APPEARANCE EMBEDDER
 # ============================================================================
 
 class AppearanceEmbedder:
     """
-    Lightweight appearance feature extractor.
-
-    Primary: torchreid OSNet (if available).
-    Fallback: colour histogram in HSV space (16×8×8 bins = 1024-dim vector).
-
-    The fallback is fast and runs on CPU with no extra dependencies.
+    Extracts normalized color-spatial appearance signatures from person crops.
     """
-
-    def __init__(self):
-        self._backend = self._init_backend()
-        logging.info(f"AppearanceEmbedder: using {self._backend} backend")
-
-    def _init_backend(self) -> str:
-        try:
-            import torchreid
-            self._reid_model = torchreid.utils.FeatureExtractor(
-                model_name="osnet_x0_25",
-                device="cpu",
-            )
-            return "torchreid"
-        except Exception:
-            pass
-        return "histogram"
 
     def extract(self, crop: np.ndarray) -> Optional[np.ndarray]:
-        """
-        Extract appearance embedding from a person crop.
-
-        Args:
-            crop: BGR image of the person (any size)
-
-        Returns:
-            1-D numpy float32 array, or None on failure
-        """
-        if crop is None or crop.size == 0:
+        if crop is None or crop.size == 0 or crop.shape[0] < 10 or crop.shape[1] < 10:
             return None
 
         try:
-            if self._backend == "torchreid":
-                return self._torchreid_embed(crop)
-            return self._histogram_embed(crop)
+            import cv2
+            # Resize crop to standard dimension
+            resized = cv2.resize(crop, (64, 128))
+            hsv = cv2.cvtColor(resized, cv2.COLOR_BGR2HSV)
+
+            # Extract 3-zone color histogram (Upper head/torso, Middle body, Lower legs)
+            h, w = hsv.shape[:2]
+            top_half = hsv[0:int(h * 0.5), :]
+            bottom_half = hsv[int(h * 0.5):, :]
+
+            hist_top = cv2.calcHist([top_half], [0, 1], None, [16, 8], [0, 180, 0, 256]).flatten()
+            hist_bot = cv2.calcHist([bottom_half], [0, 1], None, [16, 8], [0, 180, 0, 256]).flatten()
+
+            combined = np.concatenate([hist_top, hist_bot]).astype(np.float32)
+            norm = np.linalg.norm(combined)
+            return combined / (norm + 1e-6)
         except Exception as e:
-            logging.debug(f"AppearanceEmbedder error: {e}")
+            logger.debug(f"Appearance embedding error: {e}")
             return None
 
-    def _torchreid_embed(self, crop: np.ndarray) -> np.ndarray:
-        import cv2
-        import torch
-        resized = cv2.resize(crop, (128, 256))
-        features = self._reid_model([resized])
-        emb = features[0].cpu().numpy()
-        return emb / (np.linalg.norm(emb) + 1e-6)
-
-    def _histogram_embed(self, crop: np.ndarray) -> np.ndarray:
-        """
-        HSV colour histogram embedding.
-        Bins: H=16, S=8, V=8 → 1024-dim vector.
-        Normalised to unit length.
-        """
-        import cv2
-        resized = cv2.resize(crop, (64, 128))
-        hsv     = cv2.cvtColor(resized, cv2.COLOR_BGR2HSV)
-        hist    = cv2.calcHist(
-            [hsv], [0, 1, 2],
-            None,
-            [16, 8, 8],
-            [0, 180, 0, 256, 0, 256],
-        )
-        hist = hist.flatten().astype(np.float32)
-        norm = np.linalg.norm(hist)
-        return hist / (norm + 1e-6)
-
 
 # ============================================================================
-# GALLERY
+# GLOBAL PERSON TRACKER & GALLERY
 # ============================================================================
 
-class PersonGallery:
-    """
-    Thread-safe gallery of known person appearances.
+@dataclass
+class GlobalTrackEntry:
+    global_id: str
+    embeddings: List[np.ndarray] = field(default_factory=list)
+    camera_history: List[Tuple[str, float]] = field(default_factory=list)  # (cam_id, timestamp)
+    last_camera: str = ""
+    last_seen: float = 0.0
+    first_seen: float = 0.0
+    total_sightings: int = 0
 
-    Each entry stores:
-    - embedding:   appearance feature vector
-    - camera_ids:  set of cameras where person was seen
-    - last_seen:   timestamp of last sighting
+
+class GlobalPersonTracker:
+    """
+    Maintains persistent Global Person IDs (P-0001, P-0002) across all cameras.
+    Features:
+    - Cosine similarity matching against gallery embeddings
+    - Camera topology transition verification
+    - Occlusion memory buffering (tracks persist through temporary absences)
+    - ID switch dampening
     """
 
-    def __init__(self, ttl: float = REID_GALLERY_TTL):
-        self._ttl   = ttl
-        self._lock  = threading.Lock()
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self, similarity_threshold: float = 0.72, gallery_ttl: float = 120.0):
+        if self._initialized:
+            return
+
+        self.similarity_threshold = similarity_threshold
+        self.gallery_ttl = gallery_ttl
+        self.topology = CameraTopology()
+        self.embedder = AppearanceEmbedder()
+
         self._next_id = 1
-        # global_person_id → {embedding, camera_ids, last_seen}
-        self._gallery: Dict[int, dict] = {}
+        self._gallery: Dict[str, GlobalTrackEntry] = {}
+        # (camera_id, local_track_id) -> global_id
+        self._local_to_global: Dict[Tuple[str, int], str] = {}
+        self._initialized = True
 
-    def match_or_register(
+    def assign_global_id(
         self,
-        embedding:  np.ndarray,
-        camera_id:  str,
-        threshold:  float = REID_SIMILARITY_THRESHOLD,
-    ) -> Tuple[int, float]:
+        camera_id: str,
+        local_track_id: int,
+        frame: np.ndarray,
+        bbox: List[int],
+        timestamp: Optional[float] = None,
+    ) -> Tuple[str, float]:
         """
-        Find the best matching person in the gallery or register a new one.
-
-        Returns:
-            (global_person_id, similarity_score)
-            If new person: similarity_score = 0.0
+        Map a local tracker detection to a Global Person ID (P-XXXX).
+        Returns: (global_id, confidence_score)
         """
+        now = timestamp or time.time()
+        local_key = (camera_id, local_track_id)
+
         with self._lock:
-            self._expire()
+            self._cleanup_expired(now)
 
-            best_id    = None
-            best_sim   = 0.0
+            # 1. Check if this local track in this camera already has a mapped global ID
+            if local_key in self._local_to_global:
+                gid = self._local_to_global[local_key]
+                if gid in self._gallery:
+                    entry = self._gallery[gid]
+                    entry.last_seen = now
+                    entry.last_camera = camera_id
+                    return gid, 1.0
 
-            for gid, entry in self._gallery.items():
-                sim = float(np.dot(embedding, entry["embedding"]))
-                if sim > best_sim:
-                    best_sim = sim
-                    best_id  = gid
+            # 2. Extract appearance embedding from person crop
+            x1, y1, x2, y2 = bbox
+            h, w = frame.shape[:2]
+            x1_c, y1_c = max(0, x1), max(0, y1)
+            x2_c, y2_c = min(w, x2), min(h, y2)
+            crop = frame[y1_c:y2_c, x1_c:x2_c]
+            emb = self.embedder.extract(crop)
 
-            if best_id is not None and best_sim >= threshold:
-                # Update existing entry
-                entry = self._gallery[best_id]
-                # Exponential moving average of embedding
-                alpha = 0.3
-                entry["embedding"] = (
-                    alpha * embedding + (1 - alpha) * entry["embedding"]
-                )
-                entry["embedding"] /= (np.linalg.norm(entry["embedding"]) + 1e-6)
-                entry["camera_ids"].add(camera_id)
-                entry["last_seen"] = time.time()
-                return best_id, best_sim
-            else:
-                # Register new person
-                new_id = self._next_id
-                self._next_id += 1
-                self._gallery[new_id] = {
-                    "embedding":  embedding.copy(),
-                    "camera_ids": {camera_id},
-                    "last_seen":  time.time(),
-                }
-                return new_id, 0.0
+            best_gid = None
+            best_sim = 0.0
 
-    def get_cameras(self, global_person_id: int) -> List[str]:
-        """Get all cameras where this person has been seen."""
+            if emb is not None:
+                for gid, entry in self._gallery.items():
+                    elapsed = now - entry.last_seen
+                    # Validate camera topology transition
+                    if not self.topology.is_transition_valid(entry.last_camera, camera_id, elapsed):
+                        continue
+
+                    # Compare with stored embeddings for this global track
+                    for stored_emb in entry.embeddings[-3:]:
+                        sim = float(np.dot(emb, stored_emb))
+                        if sim > best_sim:
+                            best_sim = sim
+                            best_gid = gid
+
+            # 3. If match crosses similarity threshold, associate with existing global ID
+            if best_gid is not None and best_sim >= self.similarity_threshold:
+                entry = self._gallery[best_gid]
+                entry.last_seen = now
+                entry.last_camera = camera_id
+                entry.total_sightings += 1
+                if emb is not None and len(entry.embeddings) < 5:
+                    entry.embeddings.append(emb)
+                entry.camera_history.append((camera_id, now))
+
+                self._local_to_global[local_key] = best_gid
+                return best_gid, round(best_sim, 2)
+
+            # 4. Otherwise, register a new Global Person ID
+            new_gid = f"P-{self._next_id:04d}"
+            self._next_id += 1
+
+            new_entry = GlobalTrackEntry(
+                global_id=new_gid,
+                embeddings=[emb] if emb is not None else [],
+                camera_history=[(camera_id, now)],
+                last_camera=camera_id,
+                last_seen=now,
+                first_seen=now,
+                total_sightings=1,
+            )
+            self._gallery[new_gid] = new_entry
+            self._local_to_global[local_key] = new_gid
+
+            return new_gid, 1.0
+
+    def get_person_journey(self, global_id: str) -> List[Dict[str, Any]]:
+        """Return cross-camera journey history for a global person ID."""
         with self._lock:
-            entry = self._gallery.get(global_person_id)
-            return list(entry["camera_ids"]) if entry else []
+            if global_id not in self._gallery:
+                return []
+            entry = self._gallery[global_id]
+            return [
+                {"camera_id": cam, "timestamp": ts, "time_formatted": time.strftime("%H:%M:%S", time.localtime(ts))}
+                for cam, ts in entry.camera_history
+            ]
 
-    def get_last_seen(self, global_person_id: int) -> Optional[float]:
-        with self._lock:
-            entry = self._gallery.get(global_person_id)
-            return entry["last_seen"] if entry else None
-
-    def _expire(self):
-        """Remove stale gallery entries (called under lock)."""
-        now    = time.time()
-        stale  = [gid for gid, e in self._gallery.items()
-                  if now - e["last_seen"] > self._ttl]
-        for gid in stale:
+    def _cleanup_expired(self, now: float):
+        """Remove tracks exceeding gallery TTL."""
+        expired_gids = [
+            gid for gid, entry in self._gallery.items()
+            if (now - entry.last_seen) > self.gallery_ttl
+        ]
+        for gid in expired_gids:
             del self._gallery[gid]
 
-    @property
-    def size(self) -> int:
-        with self._lock:
-            return len(self._gallery)
-
-
-# ============================================================================
-# REID MANAGER
-# ============================================================================
-
-class ReidManager:
-    """
-    Cross-camera person Re-ID manager.
-
-    Called by worker.py after zone processors run (in _format_events step).
-
-    Responsibilities:
-    1. Extract appearance embeddings for person bboxes in each event
-    2. Match/register in gallery → assign global_person_id
-    3. Enrich event dicts with global_person_id + cross_camera metadata
-    4. Flag events where same person seen in multiple cameras recently
-    """
-
-    def __init__(self):
-        self._embedder = AppearanceEmbedder()
-        self._gallery  = PersonGallery(ttl=REID_GALLERY_TTL)
-
-        # camera_id → [(global_person_id, timestamp)]
-        self._camera_sightings: Dict[str, List[Tuple[int, float]]] = defaultdict(list)
-        self._lock = threading.Lock()
-
-        logging.info("ReidManager ready")
-
-    def enrich_events(
-        self,
-        events:          List[Dict],
-        tracked_objects: List[Any],    # List[TrackedObject]
-        camera_id:       str,
-        frame:           Optional[np.ndarray] = None,
-    ) -> List[Dict]:
-        """
-        Enrich event dicts with Re-ID information.
-
-        Args:
-            events:          Formatted event dicts from DetectionPipeline
-            tracked_objects: TrackedObject list from this frame
-            camera_id:       Camera that produced these events
-            frame:           Optional — needed to extract crop for embedding.
-                             If None, Re-ID still works but with less accuracy.
-
-        Returns:
-            events with added fields:
-                global_person_id: int | None
-                cross_camera:     bool
-                seen_in_cameras:  List[str]
-        """
-        if not events:
-            return events
-
-        # Build a map: object_id → TrackedObject (for crop extraction)
-        obj_map = {obj.object_id: obj for obj in tracked_objects}
-
-        for event in events:
-            person_id = event.get("metadata", {}).get("person_id")
-            if person_id is None:
-                # Try to infer from person_ids list (fight events)
-                person_ids = event.get("metadata", {}).get("person_ids", [])
-                person_id  = person_ids[0] if person_ids else None
-
-            if person_id is None:
-                event.setdefault("global_person_id", None)
-                event.setdefault("cross_camera", False)
-                event.setdefault("seen_in_cameras", [camera_id])
-                continue
-
-            tracked_obj = obj_map.get(person_id)
-            embedding   = self._get_embedding(frame, tracked_obj)
-
-            if embedding is None:
-                event.setdefault("global_person_id", None)
-                event.setdefault("cross_camera", False)
-                event.setdefault("seen_in_cameras", [camera_id])
-                continue
-
-            global_id, sim = self._gallery.match_or_register(embedding, camera_id)
-            cameras_seen   = self._gallery.get_cameras(global_id)
-            cross_camera   = len(cameras_seen) > 1
-
-            event["global_person_id"] = global_id
-            event["cross_camera"]     = cross_camera
-            event["seen_in_cameras"]  = cameras_seen
-
-            if cross_camera:
-                logging.info(
-                    f"Re-ID: global_person_id={global_id} seen in "
-                    f"{cameras_seen} (sim={sim:.2f})"
-                )
-                event["severity_score"] = min(
-                    1.0, event.get("severity_score", event["confidence"]) * 1.3
-                )
-
-            # Record sighting
-            with self._lock:
-                self._camera_sightings[camera_id].append((global_id, time.time()))
-                # Trim old sightings
-                cutoff = time.time() - REID_CROSS_CAMERA_WINDOW
-                self._camera_sightings[camera_id] = [
-                    (gid, ts) for gid, ts in self._camera_sightings[camera_id]
-                    if ts > cutoff
-                ]
-
-        return events
-
-    def _get_embedding(
-        self,
-        frame:       Optional[np.ndarray],
-        tracked_obj: Optional[Any],
-    ) -> Optional[np.ndarray]:
-        """Extract embedding from person crop."""
-        if tracked_obj is None:
-            return None
-
-        if frame is not None:
-            try:
-                x1, y1, x2, y2 = tracked_obj.bbox
-                x1, y1 = max(0, x1), max(0, y1)
-                x2 = min(frame.shape[1], x2)
-                y2 = min(frame.shape[0], y2)
-                crop = frame[y1:y2, x1:x2]
-                if crop.size > 0:
-                    return self._embedder.extract(crop)
-            except Exception:
-                pass
-
-        # Fallback: embed the bbox coordinates as a position feature
-        # (weaker but better than nothing when frame not available)
-        bbox = np.array(tracked_obj.bbox, dtype=np.float32)
-        bbox /= (np.linalg.norm(bbox) + 1e-6)
-        return bbox
-
-    def get_cross_camera_persons(
-        self,
-        window_seconds: float = REID_CROSS_CAMERA_WINDOW,
-    ) -> List[Dict]:
-        """
-        Get all persons currently seen in more than one camera.
-
-        Returns list of:
-        {
-            global_person_id: int,
-            cameras:          List[str],
-            last_seen:        float,
-        }
-        """
-        now    = time.time()
-        result = []
-
-        with self._lock:
-            # Build recent sightings across cameras
-            recent_by_person: Dict[int, set] = defaultdict(set)
-            for cam_id, sightings in self._camera_sightings.items():
-                for gid, ts in sightings:
-                    if now - ts <= window_seconds:
-                        recent_by_person[gid].add(cam_id)
-
-        for gid, cams in recent_by_person.items():
-            if len(cams) > 1:
-                result.append({
-                    "global_person_id": gid,
-                    "cameras":          list(cams),
-                    "last_seen":        self._gallery.get_last_seen(gid),
-                })
-
-        return result
-
-    @property
-    def gallery_size(self) -> int:
-        return self._gallery.size
+        # Cleanup local mapping
+        expired_local = [
+            k for k, gid in self._local_to_global.items()
+            if gid in expired_gids
+        ]
+        for k in expired_local:
+            del self._local_to_global[k]

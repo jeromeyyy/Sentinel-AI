@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450">
+  <rect width="800" height="450" fill="#141922"/>
+  <rect x="2" y="2" width="796" height="446" rx="12" fill="none" stroke="#2a3441" stroke-width="2"/>
+  <circle cx="400" cy="200" r="48" fill="#1e2633"/>
+  <path d="M376 180h48a4 4 0 0 1 4 4v32a4 4 0 0 1-4 4h-48a4 4 0 0 1-4-4v-32a4 4 0 0 1 4-4zm-8-6l6 6h-6zm64 0l6-6h-6z" fill="#8b98a5"/>
+  <circle cx="400" cy="200" r="14" fill="#141922" stroke="#8b98a5" stroke-width="3"/>
+  <text x="400" y="280" fill="#8b98a5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="500" text-anchor="middle">
+    Camera Feed Offline
+  </text>
+  <text x="400" y="305" fill="#4a5568" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" text-anchor="middle">
+    Waiting for video stream...
+  </text>
+</svg>

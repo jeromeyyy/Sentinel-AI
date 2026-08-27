@@ -70,6 +70,12 @@ async def create_indexes() -> None:
         await db.cameras.create_index("id", unique=True)
         logging.info("[DB] Cameras indexes created: tenant_id, id (unique)")
         
+        # Users collection indexes
+        logging.info("[DB] Creating indexes for 'users' collection...")
+        await db.users.create_index("id", unique=True)
+        await db.users.create_index("email", unique=True)
+        logging.info("[DB] Users indexes created: id (unique), email (unique)")
+        
     except Exception as e:
         logging.error(f"[DB] Failed to create indexes: {e}")
 
@@ -252,3 +258,68 @@ async def update_incident_resolved(event_id: str, resolved: bool = True) -> bool
     except Exception as e:
         logging.error(f"[DB] Failed to update incident {event_id}: {e}")
         return False
+
+
+async def upsert_user(user_data: dict) -> bool:
+    """
+    Insert or update an authenticated user record in MongoDB.
+    Matches by user 'id' (stable Google provider ID).
+    """
+    global db
+    
+    if db is None:
+        return False
+    
+    try:
+        user_id = user_data.get("id")
+        if not user_id:
+            logging.error("[DB] User data must have 'id' field")
+            return False
+            
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": user_data},
+            upsert=True
+        )
+        return True
+    except Exception as e:
+        logging.error(f"[DB] Failed to upsert user {user_data.get('id')}: {e}")
+        return False
+
+
+async def get_user_by_id(user_id: str) -> Optional[dict]:
+    """
+    Retrieve user record by stable provider ID.
+    """
+    global db
+    
+    if db is None:
+        return None
+    
+    try:
+        user = await db.users.find_one({"id": user_id})
+        if user:
+            user["_id"] = str(user["_id"])
+        return user
+    except Exception as e:
+        logging.error(f"[DB] Failed to get user by ID {user_id}: {e}")
+        return None
+
+
+async def get_user_by_email(email: str) -> Optional[dict]:
+    """
+    Retrieve user record by email.
+    """
+    global db
+    
+    if db is None:
+        return None
+    
+    try:
+        user = await db.users.find_one({"email": email.strip().lower()})
+        if user:
+            user["_id"] = str(user["_id"])
+        return user
+    except Exception as e:
+        logging.error(f"[DB] Failed to get user by email {email}: {e}")
+        return None
