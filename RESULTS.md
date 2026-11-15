@@ -77,7 +77,7 @@ auto-reconnect after a real backend restart, and the "waking server" banner agai
 
 ## Unit tests
 
-`cd backend && python -m pytest tests -q` -> 24 passed: zone polygon filtering (incl. concave, foot vs centre), coordinate
+*Historical count from the original unit-test step; the current suite is 32 tests, see "Latest verified state".* `cd backend && python -m pytest tests -q` -> 24 passed: zone polygon filtering (incl. concave, foot vs centre), coordinate
 scaling and clipping, EMA smoothing, `EventCooldownManager` (per-type cooldown, confidence bypass, per-camera isolation),
 temporal confirmation, crowd/fight/phone/stopped-vehicle rules on synthetic tracks.
 
@@ -109,7 +109,7 @@ Idle RSS is dominated by the torch + ultralytics import. This is NOT proof of a 
 | ultralytics + torch (.pt) | 28.2 | ~404 MB | 49 |
 | onnxruntime only (.onnx) | 27.7 | ~142 MB | 49 |
 Classroom clip, onnx: 27.9 ms p50, 180 MB peak, 600 person boxes. Equal counts are agreement between two runtimes of the same weights, not accuracy. Raw: docs/benchmarks/onnx_torchfree_detector.jsonl. The process confirmed torch and ultralytics were not imported.
-**Not yet wired into the server:** backend/pipeline/onnx_detector.py is the drop-in detector, but stream.py still uses SharedDetector, ultralytics' BYTETracker (imports torch), and the fire/weapon .pt models. A torch-free server needs a torch-free tracker and ONNX exports of those models; until then the full server RSS numbers above stand.
+**Historical (superseded: the torch-free server is now wired in, see the next section).** At the time of this spike: not yet wired into the server: backend/pipeline/onnx_detector.py is the drop-in detector, but stream.py still uses SharedDetector, ultralytics' BYTETracker (imports torch), and the fire/weapon .pt models. A torch-free server needs a torch-free tracker and ONNX exports of those models; until then the full server RSS numbers above stand.
 
 ## Torch-free full server (wired in): measured
 Clean venv with `requirements-lite.txt` (no torch, no ultralytics), MODEL_PATH=models/yolov8n.onnx, extra detectors off, autostart off, 2 vCPU sandbox: idle ~210 MB; after 2 cameras and viewers ~326 MB (peak 326 MB). Delivered 12.0 fps (2 viewers, 12 fps source) and 15.0 fps (30 fps source, capped); /api/health p50 ~64 ms. Raw: docs/benchmarks/torchfree_clean_venv.txt. Tracker: `bytetrack_lite.py` (torch-free ByteTrack port, unit-tested on synthetic motion only; not compared to Ultralytics IDs on real footage). Not verified on Render. No fire/smoke/weapon in this mode.
@@ -129,5 +129,5 @@ All of these ran on a local backend (ONNX, 2 vCPU) and a local frontend. None ra
 - Alert feed and incident dialog: tested with an explicitly SYNTHETIC fixture ("SYNTHETIC TEST FIXTURE, not a real detection"). The card, thumbnail and dialog render. No real incident was produced, so this is not detection evidence.
 - Alerts socket: before the useWebSocket fix, 3 sockets opened and 2 stayed open on a dev page, with a "[WS] Error" console error. After the fix: 2 opened and 1 stayed open in dev (React StrictMode double mount); a production build (`next start`) opened 1 socket, kept it open, with no console messages and 1 backend connect.
 - Camera status: tiles use /api/camera/{id}/health. An offline source shows "Video source unavailable"; LIVE labels, Online badges, counters, the top-bar badge and the empty-alerts text follow it.
-- Older backend (no /api/health): degraded banner, no overlay/zone editing/metrics. Tested against the live old backend through a test-side CORS proxy only. Production CORS from the Vercel origin is unverified.
+- Older backend (no /api/health): degraded banner, no overlay/zone editing/metrics. Tested against the live old backend through a test-side CORS proxy only. CORS: a local run of the new backend answered a preflight carrying the Vercel production origin header correctly, and an unlisted origin was rejected. Actual CORS of the hosted old or new deployment from the Vercel origin was not tested; this does not mean it fails.
 - Not verified: Render account/service/autodeploy, Render memory, school or outgate accuracy, classroom crop on real classroom footage.
