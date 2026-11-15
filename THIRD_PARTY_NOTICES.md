@@ -1,8 +1,10 @@
 # Third-party notices
 
-- **Ultralytics YOLOv8** (ultralytics package, yolov8n.pt weights, yolov8n.onnx export): AGPL-3.0, https://github.com/ultralytics/ultralytics. The original project already depended on it.
-- **backend/pipeline/kalman_xyah.py**: the `KalmanFilterXYAH` class copied unchanged from Ultralytics (`ultralytics/trackers/utils/kalman_filter.py`), original AGPL-3.0 header kept in the file. Source: the Ultralytics repository above.
-- **backend/pipeline/bytetrack_lite.py**: an independent compact implementation of the ByteTrack algorithm (Zhang et al., ECCV 2022, https://github.com/ifzhang/ByteTrack, MIT) modelled on the Ultralytics tracker's structure and defaults. It imports kalman_xyah.py, so treat the combined runtime as AGPL-3.0 material.
-- **Test video clips** (not in the repo): Intel IoT DevKit sample videos were used locally for measurements only. Their licence was not verified and they are not redistributed.
+## Existing obligations (unchanged by this repair)
+- **Ultralytics YOLOv8** (the `ultralytics` package, yolov8n.pt and the other .pt weights already in the repo): AGPL-3.0, https://github.com/ultralytics/ultralytics. The original project already depended on it. The repo has no LICENSE file. If the backend is deployed as a network service with the Ultralytics build, AGPL-3.0 source-offer terms may apply to it. This repair did not decide or change that.
 
-**Open decision for the repository owner:** this repository has no LICENSE file. Because AGPL-3.0 code (Ultralytics, and the copied Kalman file) is used, and the backend is run as a network service, AGPL source-offer obligations may apply to the deployed backend. This was not decided or changed here; pick a licence deliberately (or get legal advice) before relying on the code publicly.
+## Added by this repair
+- **backend/pipeline/kalman_xyah.py**: an independently written constant-velocity Kalman filter from the standard linear Kalman equations. An earlier version of this file (commit 'backend/pipeline' on branch sentinel-ai-repair, 4cea54b) was an unchanged copy of the Ultralytics `KalmanFilterXYAH` class with its AGPL-3.0 header kept; it was replaced by this rewrite, but that earlier commit remains in the branch history. The noise constants (1/20, 1/160) are the published ByteTrack/DeepSORT tuning numbers. Numerically it matches the Ultralytics filter to ~1e-15 on a synthetic track (expected: same equations); that comparison was run only as a test, no code was taken from it.
+- **backend/pipeline/bytetrack_lite.py**: independent implementation of the ByteTrack algorithm (Zhang et al., ECCV 2022, https://github.com/ifzhang/ByteTrack, MIT). Uses `lap`/`lapx` (BSD-2) for assignment.
+- The **torch-free runtime** (Dockerfile.lite) uses onnxruntime (MIT), OpenCV and numpy. The yolov8n.onnx it serves is exported at build time from the Ultralytics yolov8n.pt weights, so the weights remain AGPL-3.0 material.
+- **Test video clips** (not in the repo): Intel IoT DevKit sample videos were used locally for measurements only. Licence not verified, not redistributed.
