@@ -2,7 +2,8 @@
 # the final image has onnxruntime + OpenCV only (no torch, no ultralytics). No fire/smoke or weapon models here.
 FROM python:3.10-slim AS export
 RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir "ultralytics>=8.3.0" onnx opencv-python-headless
 WORKDIR /export
 COPY backend/models/yolov8n.pt /export/yolov8n.pt
