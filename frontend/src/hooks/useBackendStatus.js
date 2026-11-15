@@ -8,7 +8,7 @@ import { BACKEND_URL } from '@/lib/constants';
  * 'loading-model' (server up, detection model still loading), 'ready'.
  */
 export function useBackendStatus() {
-  const [status, setStatus] = useState({ state: 'waking', since: Date.now() });
+  const [status, setStatus] = useState({ state: 'waking', since: Date.now(), legacy: false });
   useEffect(() => {
     let stop = false;
     let timer;
@@ -16,6 +16,7 @@ export function useBackendStatus() {
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), 8000);
       let next = 'waking';
+      let legacy = false;
       try {
         const r = await fetch(`${BACKEND_URL}/api/health`, { signal: ctrl.signal, cache: 'no-store' });
         if (r.ok) {
@@ -25,11 +26,12 @@ export function useBackendStatus() {
           // Server is up but predates /api/health (older backend build): treat as ready,
           // otherwise the UI would show "waking server" forever. Metrics/overlay badges stay empty.
           next = 'ready';
+          legacy = true;
         }
       } catch {}
       clearTimeout(to);
       if (stop) return;
-      setStatus((s) => (s.state === next ? s : { state: next, since: Date.now() }));
+      setStatus((s) => (s.state === next && s.legacy === legacy ? s : { state: next, since: Date.now(), legacy: next === 'waking' ? s.legacy : legacy }));
       timer = setTimeout(tick, next === 'ready' ? 15000 : 3000);
     };
     tick();
