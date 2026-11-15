@@ -18,13 +18,13 @@ jobs:
           docker build --progress=plain -f backend/Dockerfile.lite -t sentinel-lite . 2>&1 | tee build.log || { echo '--- build failed, error context ---'; grep -n -B40 -E 'ERROR: failed|end of output' build.log | grep -v -E 'Unpacking|Selecting|Preparing' | head -70; exit 1; }
       - name: Run and check /api/health
         run: |
-          docker run -d --name s -p 8000:8000 sentinel-lite
+          docker run -d --name sentinel -p 8000:8000 sentinel-lite
           for i in $(seq 1 40); do
             if curl -fsS http://localhost:8000/api/health; then echo; break; fi; sleep 3
           done
           curl -fsS http://localhost:8000/api/health | tee health.json
           python3 -c "import json;d=json.load(open('health.json'));assert d.get('model_loaded') is True, d"
-          docker stats --no-stream s || true
+          docker stats --no-stream sentinel || true
       - name: Container logs on failure
         if: failure()
-        run: docker logs s || true
+        run: docker logs sentinel || true
