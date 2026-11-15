@@ -18,5 +18,7 @@ RUN pip install --no-cache-dir -r requirements-lite.txt
 COPY backend /app/backend
 COPY --from=export /export/yolov8n.onnx /app/backend/models/yolov8n.onnx
 WORKDIR /app/backend
+# safe defaults for this torch-free image (override with env vars): the ONNX model, no fire/weapon .pt models
+ENV MODEL_PATH=models/yolov8n.onnx ENABLE_EXTRA_DETECTORS=false PIPELINE_AUTOSTART=false
 EXPOSE 8000
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
