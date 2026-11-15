@@ -508,6 +508,9 @@ export default function SetupWizard({ isOpen, onClose, onComplete, existingCamer
                             <p className="text-xs text-muted-foreground">
                               Open your PC folder and pick a video file
                             </p>
+                            <p className="text-xs text-amber-500 mt-1">
+                              Uploads are kept on the server disk. On free hosting it is wiped on every restart or redeploy, so you may need to upload the video again.
+                            </p>
                           </div>
                           <Button
                             type="button"

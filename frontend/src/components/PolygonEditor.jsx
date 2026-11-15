@@ -17,10 +17,12 @@ export default function PolygonEditor({ cameraId }) {
   const [saved, setSaved] = useState([]);
   const [msg, setMsg] = useState('');
   const ref = useRef(null);
+  const legacy = !!ctx.backend?.legacy;
 
   useEffect(() => {
+    if (legacy) return;
     fetch(`${BACKEND_URL}/api/camera/${cameraId}/polygon`).then((r) => r.json()).then((j) => { setSaved(j.polygon || []); setPts(j.polygon || []); }).catch(() => {});
-  }, [cameraId]);
+  }, [cameraId, legacy]);
 
   const rect = () => {
     const el = ref.current; if (!el) return null;
@@ -60,6 +62,10 @@ export default function PolygonEditor({ cameraId }) {
       setSaved(list); setPts(list); setEditing(false); setMsg(list.length ? 'Zone saved' : 'Zone cleared (whole frame)');
     } catch (err) { setMsg(`Save failed: ${err.message}`); }
   };
+
+  if (legacy) {
+    return <div className="absolute bottom-4 left-4 rounded bg-black/70 px-3 py-1.5 text-xs text-amber-200">Zone editing needs the updated backend (this server is an older build).</div>;
+  }
 
   return (
     <>
