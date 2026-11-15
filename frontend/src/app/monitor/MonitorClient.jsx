@@ -310,7 +310,7 @@ function MonitoringView({
                 ))}
               </div>
             ) : (
-              <NoAlerts />
+              <NoAlerts monitoring={cameras.some(isOnline)} />
             )}
           </CardContent>
         </Card>
