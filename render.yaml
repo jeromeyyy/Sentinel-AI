@@ -1,11 +1,11 @@
-﻿services:
+services:
   - type: web
     name: sentinelai-backend
     env: docker
-    dockerfilePath: backend/Dockerfile
+    dockerfilePath: backend/Dockerfile.lite   # torch-free; use backend/Dockerfile for the torch/ultralytics build
     dockerContext: .
-    plan: free
-    healthCheckPath: /health
+    plan: free   # torch-free build measured ~330 MB peak for 2 cameras in a sandbox; NOT yet verified on Render's free plan (docs/DEPLOY.md #5)
+    healthCheckPath: /api/health
     envVars:
       - key: PORT
         value: 8000
@@ -13,7 +13,30 @@
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: SNAPSHOT_SECRET   # leave EMPTY to keep incident thumbnails disabled (default). Setting it enables expiring bearer links (see docs/DEPLOY.md #6)
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # --- detection pipeline tuning (all optional; defaults shown) ---
+      - key: FRONTEND_URL          # your Vercel origin(s), comma separated, e.g. https://sentinel-ai-live.vercel.app
+        sync: false
+      - key: MODEL_PATH
+        value: models/yolov8n.onnx
+      - key: IMGSZ
+        value: 480   # informational for onnx: the exported size (480) is used
+      - key: FRAME_SKIP
+        value: 3
+      - key: CONF
+        value: 0.35
+      - key: STREAM_FPS
+        value: 12
+      - key: JPEG_QUALITY
+        value: 70
+      - key: ENABLE_EXTRA_DETECTORS   # fire/smoke + weapon models: heavy; off on the free plan (512 MB)
+        value: false
+      - key: PIPELINE_AUTOSTART       # false = a camera starts when someone opens it (saves CPU/RAM)
+        value: false
+      - key: IDLE_STOP_SECONDS
+        value: 120

@@ -32,3 +32,10 @@ Desktop.ini
 !.env.example
 !backend/.env.example
 !frontend/.env.example
+
+# runtime artefacts
+backend/snapshots/*.jpg
+!backend/snapshots/.gitkeep
+*.onnx
+/test_videos/
+
