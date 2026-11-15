@@ -16,6 +16,8 @@ export function TopBar({
   children,
   className,
 }) {
+  // 'connected' only means the alerts socket is open. Say LIVE only when at least one camera has real video.
+  const feedsLive = stats.activeCameras === undefined || stats.activeCameras > 0;
   return (
     <header className={cn(
       'h-20 bg-gradient-to-r from-card/95 via-card/90 to-card/95 backdrop-blur-xl border-b border-border/50 px-6',
@@ -75,17 +77,20 @@ export function TopBar({
           animate={{ opacity: 1 }}
           className={cn(
             'hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl border',
-            wsStatus === 'connected' 
+            wsStatus === 'connected' && feedsLive
               ? 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/30 shadow-lg shadow-green-500/10'
               : 'bg-muted/50 border-border/50'
           )}
         >
           <StatusIndicator status={wsStatus} size="sm" showLabel={false} glow />
-          {wsStatus === 'connected' && (
+          {wsStatus === 'connected' && feedsLive && (
             <div className="flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5 text-green-400" />
               <span className="text-xs text-green-400 font-semibold uppercase tracking-wide">LIVE</span>
             </div>
+          )}
+          {wsStatus === 'connected' && !feedsLive && (
+            <span className="text-xs text-amber-300">Server connected, no live video</span>
           )}
           {wsStatus !== 'connected' && (
             <span className="text-xs text-muted-foreground capitalize">{wsStatus}</span>
