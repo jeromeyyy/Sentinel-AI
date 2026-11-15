@@ -1,0 +1,28 @@
+# Builds backend/Dockerfile.lite on a standard GitHub-hosted runner (free for public repos) and
+# checks that the container starts and answers /api/health. No secrets, no deploy, no push of images.
+name: docker-lite-smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: [sentinel-ai-repair]
+    paths: ['backend/**', '.github/workflows/docker-lite-smoke.yml']
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f backend/Dockerfile.lite -t sentinel-lite .
+      - name: Run and check /api/health
+        run: |
+          docker run -d --name s -p 8000:8000 sentinel-lite
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8000/api/health; then echo; break; fi; sleep 3
+          done
+          curl -fsS http://localhost:8000/api/health | tee health.json
+          python3 -c "import json;d=json.load(open('health.json'));assert d.get('model_loaded') is True, d"
+          docker stats --no-stream s || true
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs s
