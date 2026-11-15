@@ -62,14 +62,16 @@ export function NoIncidents({ className }) {
   );
 }
 
-export function NoAlerts({ className }) {
+export function NoAlerts({ className, monitoring = true }) {
   return (
     <div className={cn('text-center py-8', className)}>
       <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-        <CheckCircle className="w-6 h-6 text-green-400" />
+        <CheckCircle className={cn('w-6 h-6', monitoring ? 'text-green-400' : 'text-amber-400')} />
       </div>
       <div className="text-sm font-medium text-foreground">No active alerts</div>
-      <div className="text-xs text-muted-foreground mt-1">System is monitoring</div>
+      <div className="text-xs text-muted-foreground mt-1">
+        {monitoring ? 'System is monitoring' : 'No camera has live video, so nothing is being monitored'}
+      </div>
     </div>
   );
 }
