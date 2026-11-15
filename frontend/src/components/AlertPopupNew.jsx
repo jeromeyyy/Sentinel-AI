@@ -18,9 +18,11 @@ import { cn, formatTimestamp, formatRelativeTime, formatEventType, getEventType,
 import { PRIORITY_COLORS, ZONES } from '@/lib/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import IncidentDetailModal, { SnapshotThumb } from '@/components/IncidentDetailModal';
 
 export default function AlertPopupNew({ alert, onDismiss, onResolve, compact = false }) {
   const [expanded, setExpanded] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   
   const event = alert?.event || alert || {};
   const priority = alert?.priority || 'medium';
@@ -95,6 +97,9 @@ export default function AlertPopupNew({ alert, onDismiss, onResolve, compact = f
           </button>
         </div>
       </div>
+
+      <div className="px-4 pt-3"><SnapshotThumb event={event} onOpen={() => setDetailOpen(true)} /></div>
+      {detailOpen && <IncidentDetailModal alert={alert} onClose={() => setDetailOpen(false)} />}
 
       {/* Meta Info */}
       <div className="px-4 py-3 border-b border-border flex flex-wrap gap-4 text-xs">
