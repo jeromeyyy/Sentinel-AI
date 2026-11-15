@@ -477,6 +477,7 @@ function CameraGrid({ cameras, alerts, expandedCamera, setExpandedCamera, highli
 
 // ─── Fullscreen Camera ───────────────────────────────────────────────────────
 function FullscreenCamera({ camera, onClose }) {
+  const { isOnline } = useCameraStatus();
   if (!camera || typeof document === 'undefined') return null;
 
   return (
@@ -499,7 +500,7 @@ function FullscreenCamera({ camera, onClose }) {
         <PolygonEditor cameraId={camera.id} />
         
         <div className="absolute top-4 left-4 flex items-center gap-3">
-          <LiveIndicator />
+          {isOnline(camera) && <LiveIndicator />}
           <span className="text-white font-medium">{camera.name}</span>
         </div>
         
