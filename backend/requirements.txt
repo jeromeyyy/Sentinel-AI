@@ -9,9 +9,11 @@ websockets>=12.0
 PyJWT>=2.8.0
 
 # AI/ML - YOLOv8
-ultralytics>=8.0.0
+ultralytics>=8.3.0
 torch>=2.0.0
 torchvision>=0.15.0
+lapx>=0.5.5   # ByteTrack association (required by pipeline/tracking.py)
+onnxruntime>=1.17   # only needed if MODEL_PATH points to an .onnx export
 numpy>=1.24.0
 opencv-python-headless>=4.8.0
 

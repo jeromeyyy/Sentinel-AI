@@ -6,7 +6,9 @@ import logging
 import importlib.util
 import sys
 import os
-import subprocess
+import hmac
+import hashlib
+import secrets
 import io
 import json
 import glob
@@ -14,6 +16,7 @@ from pathlib import Path
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from reportlab.pdfgen import canvas
 import cv2
+import numpy as np
 import threading
 import time
 from typing import Dict, List, Optional
@@ -45,7 +48,7 @@ PORT = int(os.getenv("PORT", 8000))
 MODULE = os.getenv("MODULE", "school")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "*")  # Set to your Vercel domain in production
+FRONTEND_URL = os.getenv("FRONTEND_URL", "*")  # Vercel origin(s), comma separated; "*" allows any
 AUTO_DISCOVER_TEST_VIDEOS = os.getenv("AUTO_DISCOVER_TEST_VIDEOS", "0").lower() in ("1", "true", "yes", "on")
 
 VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm")
@@ -171,6 +174,9 @@ async def lifespan(app: FastAPI):
     sync_camera_configs_from_test_videos(selected_module, force=True)
     logging.info(f"📦 Active module: {selected_module}")
     logging.info(f"📹 Discovered {len(camera_configs)} cameras")
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
+    _bg = [asyncio.create_task(_boot_pipeline()), asyncio.create_task(_alert_broadcaster())]
     logging.info("✓ Backend ready! Listening for events...")
     logging.info("=" * 60)
 
@@ -178,6 +184,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown logic
     logging.info("[SHUTDOWN] Cleaning up resources...")
+    for _t in _bg:
+        _t.cancel()
     _stop_all_camera_workers()
     if DB_ENABLED:
         try:
@@ -187,20 +195,53 @@ async def lifespan(app: FastAPI):
             logging.error(f"[SHUTDOWN] Error closing MongoDB: {e}")
     logging.info("[SHUTDOWN] Server shutdown complete")
 
+# ---- decoupled pipeline (config via env: FRAME_SKIP, IMGSZ, CONF, MODEL_PATH, STREAM_FPS ...) ----
+from pipeline.config import load_config
+from pipeline.stream import StreamManager
+
+pipeline_cfg = load_config()
+_main_loop: Optional[asyncio.AbstractEventLoop] = None
+_started_at = time.time()
+
+
+def _emit_event_threadsafe(event: dict) -> None:
+    """Called from pipeline threads; hands the event to the asyncio loop (no blocking)."""
+    if event.get("snapshot_path"):
+        _sig_url = signed_snapshot_path(os.path.basename(event["snapshot_path"]))
+        if _sig_url:
+            event["snapshot_url"] = _sig_url
+    if _main_loop is not None:
+        asyncio.run_coroutine_threadsafe(receive_event(event), _main_loop)
+
+
+stream_manager = StreamManager(pipeline_cfg, emit=_emit_event_threadsafe)
+
+
+async def _boot_pipeline():
+    """Load + warm the single shared model off the event loop, then start cameras."""
+    from pipeline.stream import prune_snapshots
+    await asyncio.to_thread(prune_snapshots)
+    await asyncio.to_thread(stream_manager.init_models)
+    stream_manager.start_reaper()
+    if pipeline_cfg.autostart:
+        await asyncio.to_thread(_sync_active_camera_workers)
+
+
 app = FastAPI(title="SentinelAI Backend", lifespan=lifespan)
 
-# Configure CORS - use FRONTEND_URL env var in production
-allowed_origins = ["*"] if FRONTEND_URL == "*" else [
-    FRONTEND_URL,
-    "http://localhost:3000",  # Local development
-]
-
+# CORS: FRONTEND_URL may hold several comma-separated origins. "*" (the default) allows any origin
+# without credentials (the app uses bearer tokens, not cookies). CORS_ORIGIN_REGEX is optional,
+# e.g. r"https://sentinel-ai-.*\.vercel\.app" to also allow Vercel preview deployments.
+_origins = [o.strip().rstrip("/") for o in FRONTEND_URL.split(",") if o.strip()]
+_wildcard = (not _origins) or "*" in _origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_origins=["*"] if _wildcard else _origins + ["http://localhost:3000"],
+    allow_origin_regex=os.getenv("CORS_ORIGIN_REGEX") or None,
+    allow_credentials=not _wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # ============================================================================
@@ -214,7 +255,6 @@ alert_broadcast_queue: asyncio.Queue = asyncio.Queue()
 # Camera/Zone configuration
 camera_configs: Dict[str, Dict] = {}
 selected_module: str = DEFAULT_MODULE
-camera_worker_processes: Dict[str, subprocess.Popen] = {}
 
 # Camera sync caching (prevents repeated discovery)
 _camera_sync_cache: Dict[str, float] = {}  # module -> last_sync_timestamp
@@ -222,72 +262,44 @@ _CAMERA_SYNC_CACHE_TTL: float = 60.0  # Only re-sync every 60 seconds
 _missing_test_videos_logged: bool = False
 
 
-def _camera_worker_script() -> Path:
-    return Path(__file__).resolve().parent / "worker" / "worker.py"
+def _resolve_camera_source(camera_id: str) -> Optional[str]:
+    """Resolve a camera's configured source to an openable path/URL (None if unusable)."""
+    camera = camera_configs.get(camera_id)
+    if not camera:
+        return None
+    raw = camera.get("rtsp_url") or camera.get("video_path") or camera.get("source")
+    normalized = _normalize_stream_source(raw)
+    if not normalized:
+        return None
+    if normalized.lower().startswith(("rtsp://", "http://", "https://")):
+        return normalized
+    resolved = _resolve_video_path(normalized)
+    return resolved if resolved and os.path.exists(resolved) else None
 
 
 def _stop_camera_worker(camera_id: str) -> None:
-    process = camera_worker_processes.pop(camera_id, None)
-    if not process:
-        return
-
-    if process.poll() is None:
-        try:
-            process.terminate()
-            process.wait(timeout=5)
-        except Exception:
-            try:
-                process.kill()
-            except Exception:
-                pass
+    stream_manager.stop(camera_id)
 
 
 def _sync_camera_worker(camera_id: str, restart: bool = False) -> bool:
+    """(Re)start the in-process capture/inference/encode pipeline for a camera.
+    Replaces the old per-camera subprocess worker (it called an undefined helper, so it never ran)."""
     camera = camera_configs.get(camera_id)
     if not camera or not camera.get("active", True):
         _stop_camera_worker(camera_id)
         return False
-
-    raw_source = camera.get("rtsp_url") or camera.get("video_path") or camera.get("source")
-    source = _resolve_stream_source(raw_source)
+    source = _resolve_camera_source(camera_id)
     if not source:
         _stop_camera_worker(camera_id)
         return False
-
+    if stream_manager.detector is None and stream_manager.model_error is None:
+        return False  # model still loading; _boot_pipeline starts cameras when it is ready
     zone = _resolve_runtime_zone(camera.get("runtime_zone") or camera.get("zone") or "corridor")
     if zone not in ZONE_TYPES:
         zone = "corridor"
-
-    existing = camera_worker_processes.get(camera_id)
-    if existing and existing.poll() is None and not restart:
-        return True
-
-    _stop_camera_worker(camera_id)
-
-    worker_script = _camera_worker_script()
-    if not worker_script.exists():
-        logging.error(f"[WORKER_START] Missing worker script: {worker_script}")
-        return False
-
-    command = [
-        sys.executable,
-        str(worker_script),
-        zone,
-        source,
-        camera_id,
-        "--no-preview",
-    ]
-
-    try:
-        process = subprocess.Popen(command, cwd=str(worker_script.parent))
-        camera_worker_processes[camera_id] = process
-        logging.info(
-            f"[WORKER_START] camera={camera_id} zone={zone} source={source} pid={process.pid}"
-        )
-        return True
-    except Exception as exc:
-        logging.error(f"[WORKER_START] Failed to start worker for {camera_id}: {exc}")
-        return False
+    stream_manager.ensure(camera_id, zone, source, polygon_norm=camera.get("zone_polygon"),
+                          tenant_id=camera.get("tenant_id", "default"), restart=restart)
+    return True
 
 
 def _sync_active_camera_workers() -> None:
@@ -297,8 +309,8 @@ def _sync_active_camera_workers() -> None:
 
 
 def _stop_all_camera_workers() -> None:
-    for camera_id in list(camera_worker_processes.keys()):
-        _stop_camera_worker(camera_id)
+    stream_manager.stop_all()
+
 
 # Comprehensive Zone definitions across School, Home, and Office environments
 ZONE_TYPES = {
@@ -657,6 +669,79 @@ video_locks: Dict[str, threading.Lock] = {}
 # ============================================================================
 # HEALTH CHECK
 # ============================================================================
+def _camera_telemetry(camera_id: str) -> dict:
+    cs = stream_manager.get(camera_id)
+    if cs is None:
+        return {"people_count": 0, "detected_objects": [], "fps": 0.0, "latency_ms": None, "state": "idle"}
+    det = cs.detections_json()["tracks"]
+    m = cs.metrics()
+    return {"people_count": sum(1 for t in det if t["class"] == "person"),
+            "detected_objects": sorted({t["class"] for t in det}),
+            "fps": m["stream_fps"], "latency_ms": m["queue_lag_ms"] or None, "state": m["state"]}
+
+
+@app.get("/api/health")
+def api_health():
+    """Liveness + pipeline readiness (cheap; safe for the Render health check and the UI 'waking' state)."""
+    return {"status": "ok", "model_loaded": stream_manager.detector is not None,
+            "model_error": stream_manager.model_error, "uptime_s": round(time.time() - _started_at, 1),
+            "cameras": len(camera_configs), "streams": len(stream_manager.streams)}
+
+
+@app.get("/api/metrics")
+def api_metrics():
+    """Per-camera capture FPS, inference ms/FPS, stream FPS, queue lag (see pipeline/stream.py)."""
+    return stream_manager.metrics()
+
+
+@app.get("/api/detections/{camera_id}")
+def api_detections(camera_id: str):
+    cs = stream_manager.get(camera_id)
+    if cs is None:
+        return JSONResponse({"error": "stream not running"}, status_code=404)
+    return cs.detections_json()
+
+
+@app.websocket("/ws/detections/{camera_id}")
+async def ws_detections(websocket: WebSocket, camera_id: str):
+    """Normalised (0..1) boxes ~10x/s for the canvas overlay used with /video/{id}?clean=1."""
+    await websocket.accept()
+    try:
+        while True:
+            cs = stream_manager.get(camera_id)
+            await websocket.send_json(cs.detections_json() if cs else {"camera_id": camera_id, "tracks": [], "frame_size": [0, 0], "age_ms": None})
+            await asyncio.sleep(0.1)
+    except Exception:
+        pass
+
+
+@app.get("/api/camera/{camera_id}/polygon")
+def get_zone_polygon(camera_id: str):
+    return {"camera_id": camera_id, "polygon": camera_configs.get(camera_id, {}).get("zone_polygon", [])}
+
+
+@app.post("/api/camera/{camera_id}/polygon")
+async def set_zone_polygon(camera_id: str, data: dict):
+    """Body: {"polygon": [[x,y],...]} with x,y in 0..1 (fractions of frame width/height). Empty list = whole frame."""
+    if camera_id not in camera_configs:
+        return JSONResponse({"error": "camera not found"}, status_code=404)
+    poly = data.get("polygon") or []
+    try:
+        poly = [[min(1.0, max(0.0, float(p[0]))), min(1.0, max(0.0, float(p[1])))] for p in poly]
+    except Exception:
+        return JSONResponse({"error": "polygon must be a list of [x, y] numbers in 0..1"}, status_code=400)
+    if poly and len(poly) < 3:
+        return JSONResponse({"error": "need at least 3 points"}, status_code=400)
+    camera_configs[camera_id]["zone_polygon"] = poly
+    if DB_ENABLED:
+        try:
+            await upsert_camera(camera_configs[camera_id])
+        except Exception as e:
+            logging.error(f"[DB] polygon save failed: {e}")
+    _sync_camera_worker(camera_id, restart=True)
+    return {"success": True, "polygon": poly}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "cameras": len(camera_configs), "incidents": len(incidents)}
@@ -829,11 +914,12 @@ async def get_cameras(request: Request, user: Optional[User] = Depends(get_curre
         
         cam_copy = dict(cam)
         cam_id = cam.get("id", "")
-        telemetry = camera_live_telemetry.get(cam_id, {})
-        cam_copy["people_count"] = telemetry.get("people_count", 0)
-        cam_copy["detected_objects"] = telemetry.get("detected_objects", [])
-        cam_copy["fps"] = telemetry.get("fps", 25.0)
-        cam_copy["latency_ms"] = telemetry.get("latency_ms", 14.5)
+        telemetry = _camera_telemetry(cam_id)
+        cam_copy["people_count"] = telemetry["people_count"]
+        cam_copy["detected_objects"] = telemetry["detected_objects"]
+        cam_copy["fps"] = telemetry["fps"]                # measured delivered stream FPS (0 when not streaming)
+        cam_copy["latency_ms"] = telemetry["latency_ms"]  # measured detection latency (None when not streaming)
+        cam_copy["stream_state"] = telemetry["state"]
         visible_cameras.append(cam_copy)
         
     return {"module": active_module, "cameras": visible_cameras}
@@ -1169,9 +1255,13 @@ async def upload_video(file: UploadFile = File(...)):
     target_path = os.path.join(upload_dir, unique_name)
 
     try:
-        content = await file.read()
+        # stream to disk in chunks: no whole-file read into memory, event loop stays free
         with open(target_path, "wb") as out:
-            out.write(content)
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                await asyncio.to_thread(out.write, chunk)
     except Exception as exc:
         logging.error(f"Video upload failed: {exc}")
         return JSONResponse({"error": "Failed to store uploaded video"}, status_code=500)
@@ -1191,13 +1281,8 @@ def _get_zone_model(zone: str) -> str:
     if normalized_zone in FIRE_ONLY_ZONES or runtime_zone == "fire_only":
         return "fire_smoke_model.pt"
 
-    zone_models = {
-        "outgate": "yolov8n.pt",
-        "corridor": "yolov8s.pt",
-        "school_ground": "yolov8s.pt",
-        "classroom": "yolov8m.pt",
-    }
-    return zone_models.get(runtime_zone, "yolov8n.pt")
+    # One shared model serves every zone now (MODEL_PATH); this value is only shown in the UI.
+    return os.path.basename(pipeline_cfg.model_path)
 
 
 @app.delete("/api/camera/{camera_id}")
@@ -1472,380 +1557,89 @@ async def generate_placeholder_frames(camera_id: str):
 # REAL-TIME STREAM INFERENCE & OVERLAY PIPELINE
 # ============================================================================
 
-from worker.registry import ModelRegistry, ZONE_MODEL_CONFIGS, COCO_CLASSES
-from worker.detectors import FireSmokeDetector, WeaponDetector, PoseDetector
-from worker.behaviours import PhoneUseDetector, FightAltercationDetector, FireSmokeTracker
+# ============================================================================
+# LIVE STREAMING (capture / inference / encode are decoupled: see pipeline/stream.py)
+# ============================================================================
 
-camera_live_telemetry: Dict[str, Dict] = {}
-
-class LiveStreamPipeline:
-    """Real-time multi-model vision inference and visual annotator for MJPEG streams."""
-    _instance = None
-    _lock = threading.Lock()
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-
-    def __init__(self):
-        if self._initialized:
-            return
-        self.registry = ModelRegistry()
-        self.fire_detector = FireSmokeDetector(self.registry)
-        self.weapon_detector = WeaponDetector(self.registry)
-        self.phone_detector = PhoneUseDetector(min_duration=1.5)
-        self.fight_detector = FightAltercationDetector(proximity_threshold=90.0, min_frames=2)
-        self.fire_tracker = FireSmokeTracker(min_confirmation_frames=2, cooldown_seconds=6.0)
-        self._last_alert_time = {}
-        self._initialized = True
-        logger.info("LiveStreamPipeline initialized with multi-model inference and HUD overlay")
-
-    def process_and_annotate(self, frame, camera_id: str, zone: str, module: str = "school"):
-        now = time.time()
-        annotated = frame.copy()
-        h, w = frame.shape[:2]
-        
-        detections = []
-        persons = []
-        phones = []
-        threats = []
-
-        # Security Target Classes (no clutter from furniture or random items)
-        ALLOWED_CLASSES = {
-            "person", "cell phone", "phone",
-            "knife", "scissors", "gun", "weapon", "blade",
-            "car", "motorcycle", "bus", "truck",
-            "backpack", "handbag", "suitcase"
-        }
-
-        # 1. Primary YOLO zone model detection (optimized with imgsz=384 for ultra-fast 30fps streaming)
-        try:
-            zone_model = self.registry.get_zone_model(zone)
-            if zone_model is not None:
-                results = zone_model(frame, verbose=False, imgsz=384, conf=0.35)
-                for res in results:
-                    boxes = res.boxes
-                    if boxes is None:
-                        continue
-                    for i in range(len(boxes)):
-                        cls_id = int(boxes.cls[i].item())
-                        conf = float(boxes.conf[i].item())
-                        xyxy = boxes.xyxy[i].cpu().numpy().astype(int).tolist()
-                        class_name = COCO_CLASSES.get(cls_id, f"obj_{cls_id}").lower()
-                        
-                        # Filter to security-critical objects only (skip couch, chair, table, etc.)
-                        if class_name not in ALLOWED_CLASSES:
-                            continue
-
-                        det = {
-                            "class": class_name,
-                            "confidence": conf,
-                            "bbox": xyxy,
-                            "track_id": int(boxes.id[i].item()) if (boxes.id is not None) else (i + 1)
-                        }
-                        detections.append(det)
-                        
-                        if class_name == "person":
-                            persons.append(det)
-                        elif class_name in ("cell phone", "phone"):
-                            phones.append(det)
-        except Exception as e:
-            logger.debug(f"Primary detector error: {e}")
-
-        # 2. Fire & Smoke Ensemble Detection (Chromatic + Deep model)
-        try:
-            fire_results = self.fire_detector.detect(frame)
-            for fd in fire_results:
-                f_det = {
-                    "class": fd["class_name"],
-                    "confidence": fd["confidence"],
-                    "bbox": fd["bbox"],
-                    "track_id": None
-                }
-                detections.append(f_det)
-                threats.append({
-                    "event_type": "fire_detected" if fd["class_name"] == "fire" else "smoke_detected",
-                    "confidence": fd["confidence"],
-                    "bbox": fd["bbox"],
-                    "priority": "critical" if fd["class_name"] == "fire" else "high",
-                })
-        except Exception as e:
-            logger.debug(f"Fire detector error: {e}")
-
-        # 3. Weapon Ensemble Detection
-        if self.weapon_detector.is_available:
-            try:
-                weapon_results = self.weapon_detector.detect(frame)
-                for wd in weapon_results:
-                    detections.append({
-                        "class": wd["class_name"],
-                        "confidence": wd["confidence"],
-                        "bbox": wd["bbox"],
-                        "track_id": None
-                    })
-                    threats.append({
-                        "event_type": "weapon_detected",
-                        "confidence": wd["confidence"],
-                        "bbox": wd["bbox"],
-                        "priority": "critical"
-                    })
-            except Exception as e:
-                logger.debug(f"Weapon detector error: {e}")
-
-        # 4. Behavioral engines
-        # Fall detection (horizontal body geometry on ground)
-        for p in persons:
-            px1, py1, px2, py2 = p["bbox"]
-            pw = px2 - px1
-            ph = py2 - py1
-            if pw > ph * 1.25 and p["confidence"] > 0.55 and py2 > h * 0.35:
-                p["is_fall"] = True
-                threats.append({
-                    "event_type": "fall_detected",
-                    "confidence": 0.90,
-                    "bbox": p["bbox"],
-                    "priority": "critical"
-                })
-
-        # Phone use
-        if phones and persons:
-            phone_events = self.phone_detector.update(persons, phones, timestamp=now)
-            for pe in phone_events:
-                threats.append({
-                    "event_type": "mobile_phone_use",
-                    "confidence": pe["confidence"],
-                    "bbox": pe["bbox"],
-                    "priority": "medium"
-                })
-
-        # Fight Altercation
-        if len(persons) >= 2:
-            fight_events = self.fight_detector.update(persons, timestamp=now)
-            for fe in fight_events:
-                threats.append({
-                    "event_type": "fight_suspected",
-                    "confidence": fe["confidence"],
-                    "bounding_boxes": fe.get("bounding_boxes", []),
-                    "priority": "high"
-                })
-
-        # 5. Draw crisp bounding boxes with sleek background tags
-        for det in detections:
-            cname = det["class"].lower()
-            conf = det["confidence"]
-            x1, y1, x2, y2 = det["bbox"]
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w - 1, x2), min(h - 1, y2)
-
-            if "fire" in cname:
-                color = (0, 45, 255) # Intense Fire Red
-                label = f"FIRE {int(conf*100)}%"
-            elif "smoke" in cname:
-                color = (0, 150, 255) # Amber Smoke
-                label = f"SMOKE {int(conf*100)}%"
-            elif "person" in cname:
-                if det.get("is_fall"):
-                    color = (0, 0, 255) # Red Fall Warning
-                    label = f"FALL DETECTED ({int(conf*100)}%)"
-                else:
-                    color = (255, 220, 0) # Cyan/Neon Blue
-                    tid = det.get("track_id", 1)
-                    label = f"Person #{tid} ({int(conf*100)}%)"
-            elif "phone" in cname:
-                color = (255, 110, 180) # Purple
-                label = f"Phone {int(conf*100)}%"
-            elif any(w_word in cname for w_word in ("gun", "weapon", "knife", "scissors", "blade")):
-                color = (0, 0, 255) # Warning Red
-                label = f"WEAPON {int(conf*100)}%"
-            else:
-                color = (0, 215, 255) # Gold
-                label = f"{cname.title()} {int(conf*100)}%"
-
-            # Main bounding box
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-            
-            # Pill label tag with rounded background look
-            (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.48, 2)
-            label_y1 = max(0, y1 - th - 8)
-            label_y2 = max(th + 8, y1)
-            label_x2 = min(w, x1 + tw + 10)
-            
-            tag_overlay = annotated.copy()
-            cv2.rectangle(tag_overlay, (x1, label_y1), (label_x2, label_y2), (15, 15, 15), -1)
-            cv2.rectangle(tag_overlay, (x1, label_y1), (label_x2, label_y2), color, 1)
-            annotated = cv2.addWeighted(tag_overlay, 0.85, annotated, 0.15, 0)
-            
-            cv2.putText(annotated, label, (x1 + 5, label_y2 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
-
-        # 6. Compute live telemetry
-        people_count = len(persons)
-        detected_classes = list(set(d["class"] for d in detections))
-        camera_live_telemetry[camera_id] = {
-            "people_count": people_count,
-            "detected_objects": detected_classes,
-            "fps": 25.0,
-            "latency_ms": 14.2,
-            "last_updated": now,
-        }
-
-        return annotated, people_count, detected_classes, threats
+def _status_frame(text: str, sub: str = "") -> bytes:
+    """Small JPEG shown while the model loads / the source connects, so the <img> never looks dead."""
+    img = np.full((360, 640, 3), (18, 18, 24), dtype=np.uint8)
+    cv2.putText(img, text, (30, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+    if sub:
+        cv2.putText(img, sub, (30, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160, 160, 170), 1, cv2.LINE_AA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    return buf.tobytes()
 
 
-live_stream_pipeline = LiveStreamPipeline()
+def _mjpeg_part(jpeg: bytes) -> bytes:
+    return b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg + b"\r\n"
 
 
-async def generate_frames(camera_id: str):
-    """
-    Generate MJPEG frames with real-time model inference, bounding box overlay,
-    and automatic event broadcasting.
-    """
-    cap = get_video_capture(camera_id)
-    
-    if not cap:
-        logger.warning(f"[VIDEO_STREAM] {camera_id}: No valid source, streaming placeholder")
-        async for frame_bytes in generate_placeholder_frames(camera_id):
-            yield frame_bytes
-        return
-    
-    consecutive_errors = 0
-    max_consecutive_errors = 10
-    total_frames = 0
-    corrupted_frames = 0
-    last_reconnect = 0
-    
-    config = camera_configs.get(camera_id, {})
-    camera_name = config.get("name", camera_id)
-    zone = config.get("zone", "unknown")
-    
-    logger.info(f"[VIDEO_STREAM] Starting real-time AI stream for {camera_name} ({camera_id})")
-    
+async def generate_frames(camera_id: str, clean: bool = False):
+    """MJPEG generator. It only ever READS the latest JPEG produced by the camera's encoder
+    thread; it never decodes, runs inference or encodes, so it cannot block the event loop."""
+    kind = "clean" if clean else "annotated"
+    cs = None
+    last_seq = 0
+    last_status = 0.0
+    interval = 1.0 / max(1.0, pipeline_cfg.stream_fps * 2)
     try:
         while True:
-            ret, frame = cap.read()
-            
-            # Loop video file seamlessly if reaching the end
-            if not ret:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ret, frame = cap.read()
-
-            if not ret or frame is None or frame.size == 0:
-                consecutive_errors += 1
-                corrupted_frames += 1
-                
-                if consecutive_errors >= max_consecutive_errors:
-                    cap.release()
-                    await asyncio.sleep(1)
-                    cap = get_video_capture(camera_id)
-                    if not cap:
-                        async for frame_bytes in generate_placeholder_frames(camera_id):
-                            yield frame_bytes
-                        return
-                    consecutive_errors = 0
-                    last_reconnect += 1
-                
-                await asyncio.sleep(0.033)
-                continue
-            
-            consecutive_errors = 0
-            total_frames += 1
             now = time.time()
-            
-            # Run Live Vision Pipeline (Inference + Bounding Boxes + Telemetry)
-            annotated_frame, people_count, detected_objs, threats = live_stream_pipeline.process_and_annotate(
-                frame, camera_id, zone, selected_module
-            )
-            
-            # Auto-emit threats to WebSocket & Active Alerts
-            for threat in threats:
-                ev_type = threat.get("event_type", "unknown")
-                last_t = live_stream_pipeline._last_alert_time.get((camera_id, ev_type), 0)
-                if now - last_t > 4.0:  # 4s cooldown
-                    live_stream_pipeline._last_alert_time[(camera_id, ev_type)] = now
-                    event_id = f"EVT_{int(now * 1000)}"
-                    event_payload = {
-                        "event_id": event_id,
-                        "tenant_id": config.get("tenant_id", "default"),
-                        "camera_id": camera_id,
-                        "zone": zone,
-                        "event_type": ev_type,
-                        "confidence": threat.get("confidence", 0.88),
-                        "timestamp": now,
-                        "bounding_boxes": [threat.get("bbox")] if threat.get("bbox") else threat.get("bounding_boxes", []),
-                        "metadata": {"live_stream": True, "detected_objects": detected_objs}
-                    }
-                    asyncio.create_task(receive_event(event_payload))
-
-            # Add HUD Overlay (Zone + Live status + People counter)
-            final_frame = add_frame_overlay(annotated_frame, camera_id, zone, people_count)
-            
-            # Encode frame to JPEG
-            try:
-                encode_params = [
-                    cv2.IMWRITE_JPEG_QUALITY, 85,
-                    cv2.IMWRITE_JPEG_OPTIMIZE, 1
-                ]
-                ret_encode, buffer = cv2.imencode('.jpg', final_frame, encode_params)
-                if not ret_encode:
-                    continue
-                
-                yield (
-                    b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + 
-                    buffer.tobytes() + 
-                    b'\r\n'
-                )
-            except Exception as e:
-                logger.error(f"[VIDEO_STREAM] Encoding error: {e}")
+            if camera_id not in camera_configs:
+                yield _mjpeg_part(_status_frame("Camera not found", camera_id))
+                await asyncio.sleep(2.0)
                 continue
-            
-            await asyncio.sleep(0.033)  # ~30 FPS
-    
+            if cs is None or cs._stop.is_set():
+                if cs is not None:
+                    cs.remove_viewer(kind)
+                    cs = None
+                if not _resolve_camera_source(camera_id):
+                    yield _mjpeg_part(_status_frame("No video source", "Set a video file or RTSP URL for this camera"))
+                    await asyncio.sleep(2.0)
+                    continue
+                if stream_manager.detector is None and stream_manager.model_error is None:
+                    yield _mjpeg_part(_status_frame("Loading detection model...", "First start after a cold boot takes a while"))
+                    await asyncio.sleep(1.0)
+                    continue
+                _sync_camera_worker(camera_id)
+                cs = stream_manager.get(camera_id)
+                if cs is None:
+                    await asyncio.sleep(1.0)
+                    continue
+                cs.add_viewer(kind)
+                last_seq = 0
+            seq, jpg = cs.latest_jpeg(kind)
+            if jpg is not None and seq != last_seq:
+                last_seq = seq
+                last_status = now
+                yield _mjpeg_part(jpg)
+            elif now - last_status > 1.0:
+                last_status = now
+                state = cs.state
+                msg = {"starting": "Connecting to camera...", "reconnecting": "Reconnecting...", "error": "Cannot open video source"}.get(state, "Waiting for frames...")
+                yield _mjpeg_part(_status_frame(msg, cs.error or ""))
+            await asyncio.sleep(interval)
     except asyncio.CancelledError:
-        logger.info(f"[VIDEO_STREAM] Stream cancelled for {camera_name}")
-    except Exception as e:
-        logger.error(f"[VIDEO_STREAM] Unexpected stream error: {e}")
+        pass
     finally:
-        if cap:
-            cap.release()
+        if cs is not None:
+            cs.remove_viewer(kind)
 
 
-def add_frame_overlay(frame, camera_id: str, zone: str, people_count: int = 0):
-    """Add HUD header bar, live dot, and dynamic people counter to frame."""
-    h, w = frame.shape[:2]
-    
-    # Semi-transparent top HUD bar
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, 36), (10, 10, 15), -1)
-    frame = cv2.addWeighted(overlay, 0.65, frame, 0.35, 0)
-    
-    # Zone label
-    zone_label = ZONE_TYPES.get(zone, {}).get("name", zone.title())
-    cv2.putText(frame, zone_label, (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
-    
-    # People count indicator
-    if people_count > 0:
-        ppl_text = f"PPL: {people_count}"
-        cv2.putText(frame, ppl_text, (w // 2 - 40, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 235, 255), 2, cv2.LINE_AA)
-    
-    # Live indicator with red dot
-    cv2.circle(frame, (w - 75, 18), 5, (0, 0, 255), -1)
-    cv2.putText(frame, "LIVE", (w - 62, 23), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2, cv2.LINE_AA)
-    
-    # Timestamp
-    timestamp = time.strftime("%H:%M:%S")
-    return frame
+def _stream_headers():
+    return {"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
 
 
 @app.get("/video/{camera_id}")
-async def video_feed(camera_id: str):
-    """MJPEG stream for a specific camera with enhanced error recovery."""
+async def video_feed(camera_id: str, clean: Optional[bool] = None):
+    """MJPEG stream. Default has boxes drawn server-side; ?clean=1 serves plain video and the
+    browser draws boxes from /ws/detections/{camera_id} (smoother, boxes never delay the picture)."""
+    use_clean = pipeline_cfg.clean_stream_default if clean is None else clean
     return StreamingResponse(
-        generate_frames(camera_id),
-        media_type="multipart/x-mixed-replace; boundary=frame"
+        generate_frames(camera_id, clean=use_clean),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers=_stream_headers(),
     )
 
 
@@ -1855,13 +1649,52 @@ async def camera_feed():
     """Legacy single camera feed endpoint."""
     return StreamingResponse(
         generate_frames("cam_outgate"),
-        media_type="multipart/x-mixed-replace; boundary=frame"
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers=_stream_headers()
     )
 
 
+_SNAP_SECRET_RAW = os.getenv("SNAPSHOT_SECRET", "").strip()
+SNAPSHOTS_ENABLED = len(_SNAP_SECRET_RAW) >= 16
+_SNAP_SECRET = _SNAP_SECRET_RAW.encode()
+if not SNAPSHOTS_ENABLED:
+    logging.warning("SNAPSHOT_SECRET unset or shorter than 16 chars: incident snapshot links are DISABLED "
+                    "(a random per-process secret would break links across restarts/workers). Set it to enable them.")
+_SNAP_TTL_S = int(os.getenv("SNAPSHOT_URL_TTL_S", "3600"))
+
+
+def _snap_sig(filename: str, exp: int) -> str:
+    return hmac.new(_SNAP_SECRET, f"{filename}:{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def signed_snapshot_path(filename: str) -> str:
+    """Short-lived HMAC-signed URL path: incident images are not world-readable by filename.
+    Returns None when snapshots are disabled (no stable SNAPSHOT_SECRET)."""
+    if not SNAPSHOTS_ENABLED:
+        return None
+    exp = int(time.time()) + _SNAP_TTL_S
+    return f"/snapshot/{filename}?exp={exp}&sig={_snap_sig(filename, exp)}"
+
+
+@app.get("/api/snapshot-link/{filename}")
+def refresh_snapshot_link(filename: str, user: Optional[User] = Depends(get_current_user)):
+    """Re-issue a fresh signed link for an existing snapshot (old alerts whose link expired).
+    Same access level as the rest of the API: it needs the same auth dependency and an existing file;
+    it does not make anything reachable that the API did not already expose."""
+    filename = os.path.basename(filename)
+    if not SNAPSHOTS_ENABLED or not filename.startswith("evt_") or not (_PROJECT_ROOT / "backend" / "snapshots" / filename).exists():
+        return JSONResponse(status_code=404, content={"error": "Snapshot not available"})
+    return {"snapshot_url": signed_snapshot_path(filename)}
+
+
 @app.get("/snapshot/{filename}")
-def get_snapshot(filename: str):
-    """Serve snapshot image for WhatsApp media attachments."""
+def get_snapshot(filename: str, exp: int = 0, sig: str = ""):
+    """Serve an incident snapshot. Requires a valid unexpired signature (SNAPSHOT_SECRET, SNAPSHOT_URL_TTL_S)."""
+    filename = os.path.basename(filename)  # no path traversal
+    if not SNAPSHOTS_ENABLED:
+        return JSONResponse(status_code=503, content={"error": "Snapshots disabled: SNAPSHOT_SECRET not configured"})
+    if not exp or exp < time.time() or not hmac.compare_digest(sig, _snap_sig(filename, exp)):
+        return JSONResponse(status_code=403, content={"error": "Invalid or expired snapshot link"})
     snapshot_path = _PROJECT_ROOT / "backend" / "snapshots" / filename
     
     if not snapshot_path.exists():
@@ -1874,7 +1707,7 @@ def get_snapshot(filename: str):
         path=str(snapshot_path),
         media_type="image/jpeg",
         headers={
-            "Cache-Control": "public, max-age=3600"
+            "Cache-Control": "private, max-age=300"
         }
     )
 
@@ -1973,91 +1806,46 @@ async def receive_event(event: dict, request: Request = None):
 # ============================================================================
 # WEBSOCKET FOR REAL-TIME ALERTS
 # ============================================================================
+async def _alert_broadcaster():
+    """ONE task drains the alert queue and fans out to every connected client.
+    (Previously every WebSocket handler pulled from the same queue, so with N clients each alert
+    reached only one of them.)"""
+    while True:
+        alert = await alert_broadcast_queue.get()
+        event = alert.get("event", {})
+        payload = {"id": event.get("event_id"), "event": event, "alert": alert.get("alert", {})}
+        dead = []
+        for client in list(active_alert_clients):
+            try:
+                await asyncio.wait_for(client.send_json(payload), timeout=5)
+            except Exception as e:
+                logging.warning(f"[WS_SEND_FAIL] event_id={payload['id']} error={str(e)[:100]}")
+                dead.append(client)
+        for client in dead:
+            if client in active_alert_clients:
+                active_alert_clients.remove(client)
+        logging.info(f"[WS_BROADCAST] event_id={payload['id']} type={event.get('event_type')} "
+                     f"sent={len(active_alert_clients)} failed={len(dead)}")
+
+
 @app.websocket("/ws/alerts")
 async def alerts_ws(websocket: WebSocket):
-    client_id = id(websocket)
     await websocket.accept()
     active_alert_clients.append(websocket)
-    logging.info(f"[WS_CLIENT_CONNECTED] id={client_id} active_clients={len(active_alert_clients)}")
-    
+    logging.info(f"[WS_CLIENT_CONNECTED] active_clients={len(active_alert_clients)}")
     try:
-        # On connect, send the last alert if available
         if alerts_history:
-            last_alert = alerts_history[-1]
-            await websocket.send_json(last_alert)
-            logging.debug(
-                f"[WS_INITIAL_ALERT] client={client_id} "
-                f"event_type={last_alert.get('event', {}).get('event_type', 'unknown')}"
-            )
+            await websocket.send_json(alerts_history[-1])
         else:
             await websocket.send_json({"msg": "No alerts yet."})
-            logging.debug(f"[WS_INITIAL_EMPTY] client={client_id}")
-        
-        # Broadcast loop: listen for new alerts and send to all clients
-        while True:
-            alert = await alert_broadcast_queue.get()
-            event_type = alert.get('event', {}).get('event_type', 'unknown')
-            event_id = alert.get('event', {}).get('event_id', 'null')
-            active_count = len(active_alert_clients)
-            
-            # STEP 1: LOG EXACT PAYLOAD BEFORE BROADCAST
-            payload_to_send = {
-                "id": event_id,  # ADD ID FOR FRONTEND
-                "event": alert.get('event', {}),
-                "alert": alert.get('alert', {})
-            }
-            logging.info(
-                f"[WS_BROADCAST_START] event_id={event_id} type={event_type} "
-                f"clients={active_count}"
-            )
-            logging.debug(
-                f"[WS_PAYLOAD_DEBUG] Sending to {active_count} clients: "
-                f"id={event_id} has_event={bool(payload_to_send['event'])} "
-                f"has_alert={bool(payload_to_send['alert'])}"
-            )
-            
-            # Broadcast to all connected clients
-            failed_clients = []
-            for idx, client in enumerate(active_alert_clients):
-                try:
-                    # Send payload WITH id field for frontend IncidentList
-                    await client.send_json(payload_to_send)
-                    logging.debug(
-                        f"[WS_SEND_OK] event_id={event_id} client={idx} "
-                        f"type={event_type}"
-                    )
-                except Exception as e:
-                    logging.warning(
-                        f"[WS_SEND_FAIL] event_id={event_id} client={idx} "
-                        f"error={str(e)[:100]}"
-                    )
-                    failed_clients.append(client)
-            
-            # Remove dead clients
-            for client in failed_clients:
-                if client in active_alert_clients:
-                    active_alert_clients.remove(client)
-                    logging.info(
-                        f"[WS_CLIENT_REMOVED] event_id={event_id} "
-                        f"remaining={len(active_alert_clients)}"
-                    )
-            
-            logging.info(
-                f"[WS_BROADCAST_DONE] event_id={event_id} type={event_type} "
-                f"success={active_count - len(failed_clients)}/{active_count}"
-            )
-    except Exception as e:
-        logging.error(
-            f"[WS_HANDLER_ERROR] client={client_id} error={e}",
-            exc_info=True
-        )
+        while True:  # keep the socket open; the broadcaster task does the sending
+            await websocket.receive_text()
+    except Exception:
+        pass
     finally:
         if websocket in active_alert_clients:
             active_alert_clients.remove(websocket)
-        logging.info(
-            f"[WS_CLIENT_DISCONNECTED] id={client_id} "
-            f"remaining_clients={len(active_alert_clients)}"
-        )
+        logging.info(f"[WS_CLIENT_DISCONNECTED] remaining_clients={len(active_alert_clients)}")
 
 
 @app.get("/incidents")
@@ -2216,7 +2004,7 @@ def get_stats(user: Optional[User] = Depends(get_current_user)):
         etype = inc.get("event", {}).get("event_type", "other")
         by_type[etype] = by_type.get(etype, 0) + 1
 
-    total_people = sum(t.get("people_count", 0) for t in camera_live_telemetry.values())
+    total_people = sum(_camera_telemetry(c)["people_count"] for c in list(stream_manager.streams))
 
     return {
         "total_incidents": len(user_incidents),

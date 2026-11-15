@@ -1,0 +1,22 @@
+# Torch-free RUNTIME image. A throwaway build stage uses torch+ultralytics only to export yolov8n.onnx;
+# the final image has onnxruntime + OpenCV only (no torch, no ultralytics). No fire/smoke or weapon models here.
+FROM python:3.10-slim AS export
+RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir "ultralytics>=8.3.0" onnx opencv-python-headless
+WORKDIR /export
+COPY backend/models/yolov8n.pt /export/yolov8n.pt
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt').export(format='onnx', imgsz=480, simplify=False)"
+
+FROM python:3.10-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 ffmpeg curl \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY backend/requirements-lite.txt /app/requirements-lite.txt
+RUN pip install --no-cache-dir -r requirements-lite.txt
+COPY backend /app/backend
+COPY --from=export /export/yolov8n.onnx /app/backend/models/yolov8n.onnx
+WORKDIR /app/backend
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

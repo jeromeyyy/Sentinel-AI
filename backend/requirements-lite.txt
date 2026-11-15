@@ -1,0 +1,42 @@
+# Torch-free runtime (MODEL_PATH=models/yolov8n.onnx, ENABLE_EXTRA_DETECTORS=0). No ultralytics/torch.
+# FastAPI & Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+websockets>=12.0
+
+# Authentication
+PyJWT>=2.8.0
+
+# AI/ML - YOLOv8
+lapx>=0.5.5   # ByteTrack association (required by pipeline/tracking.py)
+onnxruntime>=1.17
+numpy>=1.24.0
+opencv-python-headless>=4.8.0
+
+# PDF Generation
+reportlab>=4.0.0
+
+# HTTP Client
+requests>=2.31.0
+httpx>=0.25.0
+
+# Caching & State Management (Redis Backend)
+redis>=5.0.0
+
+# MongoDB (Atlas)
+motor>=3.3.0
+
+# Notifications
+twilio>=8.10.0
+openai>=1.12.0
+
+# Environment & Timezone
+python-dotenv>=1.0.0
+pytz>=2024.1
+
+# Image Processing
+Pillow>=10.0.0
+
+# Utilities
+pydantic>=2.0.0
