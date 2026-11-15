@@ -1,0 +1,2 @@
+{"torch_imported": false, "ultralytics_imported": false, "frames": 150, "p50_ms": 27.7, "mean_ms": 27.8, "person_boxes": 49, "peak_rss_mb": 144}
+{"torch_imported": false, "ultralytics_imported": false, "frames": 150, "p50_ms": 27.6, "mean_ms": 28.0, "person_boxes": 600, "peak_rss_mb": 187}

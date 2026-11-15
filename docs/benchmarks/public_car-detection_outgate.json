@@ -1,0 +1,25 @@
+{
+ "video": "car-detection.mp4",
+ "zone": "outgate",
+ "resolution": "768x432->768x432",
+ "source_fps": 12.5,
+ "frames_read": 377,
+ "inference_cycles": 126,
+ "frame_skip": 3,
+ "imgsz": 480,
+ "model": "yolov8n.pt",
+ "extra_detectors": false,
+ "avg_inference_ms": 29.0,
+ "p95_inference_ms": 29.4,
+ "processing_fps": 99.5,
+ "realtime_factor": 7.96,
+ "detections_per_class": {
+  "car": 7,
+  "bus": 1
+ },
+ "unique_tracks": {
+  "car": 4,
+  "bus": 1
+ },
+ "heuristic_events_before_cooldown": {}
+}

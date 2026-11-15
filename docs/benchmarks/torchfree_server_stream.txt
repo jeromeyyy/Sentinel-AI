@@ -1,0 +1,46 @@
+# torch-free server (MODEL_PATH=models/yolov8n.onnx IMGSZ=480 extra off autostart off), 2 vCPU sandbox
+## people clip, 2 viewers
+{
+ "viewers": [
+  {
+   "first_frame_s": 0.21132636070251465,
+   "frames": 238,
+   "fps": 11.964289909227748,
+   "gap_p50_ms": 66.48087501525879,
+   "gap_p95_ms": 133.32843780517578,
+   "gap_max_ms": 166.01824760437012
+  },
+  {
+   "first_frame_s": 0.20034575462341309,
+   "frames": 238,
+   "fps": 11.962528028091704,
+   "gap_p50_ms": 66.47539138793945,
+   "gap_p95_ms": 133.49223136901855,
+   "gap_max_ms": 166.0172939300537
+  }
+ ],
+ "health_probe": {
+  "health_n": 36,
+  "health_p50_ms": 62.64376640319824,
+  "health_max_ms": 166.69249534606934
+ }
+}
+## classroom 1080p-ish clip, 1 viewer
+{
+ "viewers": [
+  {
+   "first_frame_s": 0.27165818214416504,
+   "frames": 298,
+   "fps": 15.005852966482722,
+   "gap_p50_ms": 66.42317771911621,
+   "gap_p95_ms": 67.95597076416016,
+   "gap_max_ms": 99.54357147216797
+  }
+ ],
+ "health_probe": {
+  "health_n": 36,
+  "health_p50_ms": 65.20020961761475,
+  "health_max_ms": 88.63329887390137
+ }
+}
+RSS_after VmRSS:	  325852 kB HWM VmHWM:	  328080 kB

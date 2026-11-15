@@ -1,0 +1,8 @@
+# CLEAN venv WITHOUT torch/ultralytics (requirements-lite.txt), MODEL_PATH=models/yolov8n.onnx IMGSZ=480, extra off, autostart off, 2 vCPU sandbox
+idle VmRSS:	  212640 kB
+   "fps": 11.99451184746062,
+   "fps": 11.96469845410639,
+  "health_p50_ms": 65.65439701080322,
+   "fps": 15.056637941969802,
+  "health_p50_ms": 63.70687484741211,
+2 cameras after streaming VmRSS:	  325800 kB VmHWM:	  325800 kB

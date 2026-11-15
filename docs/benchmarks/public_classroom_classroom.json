@@ -1,0 +1,23 @@
+{
+ "video": "classroom.mp4",
+ "zone": "classroom",
+ "resolution": "1920x1080->960x540",
+ "source_fps": 30.0,
+ "frames_read": 984,
+ "inference_cycles": 328,
+ "frame_skip": 3,
+ "imgsz": 480,
+ "model": "yolov8n.pt",
+ "extra_detectors": false,
+ "avg_inference_ms": 59.1,
+ "p95_inference_ms": 60.5,
+ "processing_fps": 44.8,
+ "realtime_factor": 1.49,
+ "detections_per_class": {
+  "person": 1312
+ },
+ "unique_tracks": {
+  "person": 4
+ },
+ "heuristic_events_before_cooldown": {}
+}

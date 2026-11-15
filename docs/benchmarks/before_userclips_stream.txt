@@ -1,0 +1,6 @@
+video_4bf70def
+{"viewers":[{"first_frame_s":2.0043632984161377,"frames":54,"fps":2.944581654843512,"gap_p50_ms":339.5082950592041,"gap_p95_ms":344.5408344268799,"gap_max_ms":351.0568141937256}],"health_probe":{"health_n":28,"health_p50_ms":179.9302101135254,"health_max_ms":1623.6481666564941}}
+video_233208ee
+{"viewers":[{"first_frame_s":1.0378310680389404,"frames":57,"fps":2.905720051002785,"gap_p50_ms":342.1212434768677,"gap_p95_ms":357.21778869628906,"gap_max_ms":371.32811546325684}],"health_probe":{"health_n":29,"health_p50_ms":184.6466064453125,"health_max_ms":695.7199573516846}}
+video_b5d1a33c
+{"viewers":[{"first_frame_s":0.9870874881744385,"frames":56,"fps":2.8499925274503006,"gap_p50_ms":349.18880462646484,"gap_p95_ms":359.94911193847656,"gap_max_ms":368.68786811828613}],"health_probe":{"health_n":28,"health_p50_ms":199.5609998703003,"health_max_ms":633.8522434234619}}

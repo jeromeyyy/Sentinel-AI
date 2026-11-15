@@ -1,0 +1,26 @@
+{
+ "video": "video-b5d1a33c.mp4",
+ "zone": "fire_only",
+ "resolution": "1080x1920->960x1706",
+ "source_fps": 29.97,
+ "frames_read": 1696,
+ "inference_cycles": 566,
+ "frame_skip": 3,
+ "imgsz": 480,
+ "model": "yolov8n.pt",
+ "extra_detectors": true,
+ "avg_inference_ms": 79.3,
+ "p95_inference_ms": 240.0,
+ "processing_fps": 30.7,
+ "realtime_factor": 1.02,
+ "detections_per_class": {
+  "smoke": 270,
+  "gun": 17,
+  "fire": 270
+ },
+ "unique_tracks": {},
+ "heuristic_events_before_cooldown": {
+  "fire_smoke_detected": 171,
+  "weapon_detected": 9
+ }
+}
