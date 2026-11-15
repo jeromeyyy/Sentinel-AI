@@ -38,3 +38,15 @@ def test_no_torch_import():
     assert "torch" not in sys.modules or True  # module itself must not import torch
     import pipeline.bytetrack_lite as m
     assert not hasattr(m, "torch")
+
+
+def test_kalman_tracks_constant_velocity():
+    from pipeline.kalman_xyah import KalmanFilterXYAH
+    kf = KalmanFilterXYAH()
+    m, c = kf.initiate(np.array([100.0, 100.0, 0.5, 80.0]))
+    for i in range(1, 15):
+        m, c = kf.predict(m, c)
+        m, c = kf.update(m, c, np.array([100.0 + 4 * i, 100.0 + 2 * i, 0.5, 80.0]))
+    assert abs(m[4] - 4) < 0.5 and abs(m[5] - 2) < 0.5
+    m2, _ = kf.predict(m, c)
+    assert abs(m2[0] - (100 + 4 * 15)) < 3
