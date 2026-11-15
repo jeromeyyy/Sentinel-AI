@@ -30,7 +30,7 @@ import { NoIncidents, NoAlerts, NoCameras, NoSearchResults } from '@/components/
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { createPortal } from 'react-dom';
 import PolygonEditor from '@/components/PolygonEditor';
-import StreamTile, { StreamStatusProvider } from '@/components/StreamTile';
+import StreamTile, { StreamStatusProvider, LegacyBackendBanner, useCameraStatus } from '@/components/StreamTile';
 import { BACKEND_URL, ZONES, PRIORITY_COLORS, EVENT_LABELS } from '@/lib/constants';
 import { cn, formatTimestamp, formatRelativeTime, formatEventType, getAlertKey, getCameraId, getEventType, fetchBackend } from '@/lib/utils';
 
@@ -56,6 +56,7 @@ export default function MonitorClient() {
 }
 
 function MonitorClientInner() {
+  const { isOnline } = useCameraStatus();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab');
@@ -173,13 +174,14 @@ function MonitorClientInner() {
       title={tabConfig.title}
       subtitle={tabConfig.subtitle}
       stats={{
-        activeCameras: stats.active_cameras || cameras.length,
+        activeCameras: cameras.filter(isOnline).length,
         totalIncidents: stats.total_incidents || incidents.length,
         criticalAlerts: criticalCount,
       }}
       alertCount={activeAlertCount}
       wsStatus={wsStatus}
     >
+      <LegacyBackendBanner />
       <AnimatePresence mode="wait">
         {activeTab === 'monitoring' && (
           <MonitoringView
@@ -251,6 +253,7 @@ function MonitoringView({
   highlightedCamera, 
   dismissAlert 
 }) {
+  const { isOnline } = useCameraStatus();
   if (loading) {
     return (
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -316,7 +319,7 @@ function MonitoringView({
         <div className="grid grid-cols-2 gap-3">
           <StatBox
             label="Active Cameras"
-            value={cameras.filter(c => c.active).length}
+            value={cameras.filter(isOnline).length}
             icon={<Camera className="w-5 h-5" />}
             color="blue"
             size="sm"
@@ -355,7 +358,7 @@ function MonitoringView({
                   📹 Active Feeds
                 </span>
                 <Badge variant="outline" size="sm" className="border-blue-500/30 text-blue-400 font-bold">
-                  {Array.isArray(cameras) ? cameras.filter(c => c?.active).length : 0}
+                  {Array.isArray(cameras) ? cameras.filter(isOnline).length : 0}
                 </Badge>
               </div>
               {Object.entries(analytics?.by_type || stats?.by_type || {}).slice(0, 3).map(([type, count]) => (
@@ -386,6 +389,7 @@ function MonitoringView({
 
 // ─── Camera Grid ─────────────────────────────────────────────────────────────
 function CameraGrid({ cameras, alerts, expandedCamera, setExpandedCamera, highlightedCamera }) {
+  const { isOnline } = useCameraStatus();
   if (cameras.length === 0) {
     return (
       <Card>
@@ -421,9 +425,9 @@ function CameraGrid({ cameras, alerts, expandedCamera, setExpandedCamera, highli
             {/* Top Overlay */}
             <div className="camera-overlay">
               <div className="flex items-center gap-2">
-                <LiveIndicator />
-                <Badge variant={camera.active ? 'online' : 'offline'} size="sm" dot>
-                  {camera.active ? 'Online' : 'Offline'}
+                {isOnline(camera) && <LiveIndicator />}
+                <Badge variant={isOnline(camera) ? 'online' : 'offline'} size="sm" dot>
+                  {isOnline(camera) ? 'Online' : 'Offline'}
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
@@ -513,6 +517,7 @@ function FullscreenCamera({ camera, onClose }) {
 
 // ─── Cameras View ────────────────────────────────────────────────────────────
 function CamerasView({ cameras, loading, expandedCamera, setExpandedCamera }) {
+  const { isOnline } = useCameraStatus();
   if (loading) {
     return <SkeletonCameraGrid count={6} />;
   }
@@ -544,8 +549,8 @@ function CamerasView({ cameras, loading, expandedCamera, setExpandedCamera }) {
               <div className="aspect-video relative">
                 <StreamTile cameraId={camera.id} alt={camera.name} />
                 <div className="absolute top-2 right-2">
-                  <Badge variant={camera.active ? 'online' : 'offline'} size="sm" dot>
-                    {camera.active ? 'Online' : 'Offline'}
+                  <Badge variant={isOnline(camera) ? 'online' : 'offline'} size="sm" dot>
+                    {isOnline(camera) ? 'Online' : 'Offline'}
                   </Badge>
                 </div>
               </div>
