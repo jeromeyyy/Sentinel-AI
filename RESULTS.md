@@ -72,9 +72,8 @@ stays the default. `scripts/export_onnx.py` is there to try on the target machin
 
 Production build passes (`next build`). Loaded `/monitor` in headless Chrome against the local backend with two cameras:
 no console errors, no failed requests, both streams live (`naturalWidth` 768), FPS/latency badge visible, camera tiles
-show the measured values. Not tested in a real browser: the canvas box overlay in fullscreen (its WebSocket and clean
-stream were verified from a script: 40 detection messages received while the clean stream delivered frames), auto-reconnect
-after a real backend restart, and the "waking server" banner against a sleeping Render instance.
+show the measured values. Later browser checks are listed under "Latest verified state" below. Still not tested in a real browser:
+auto-reconnect after a real backend restart, and the "waking server" banner against a sleeping Render instance.
 
 ## Unit tests
 
@@ -120,3 +119,15 @@ scripts/compare_trackers.py, raw: docs/benchmarks/tracker_compare_public_clips.j
 
 ## Weapon-model keyframe review (bounded, 5 frames, user clips, not published)
 All 5 saved weapon_detected frames were looked at by eye: three show a DVD/AV shelf (twice at the bottom-left, once a shelf under a TV), one the top of a cat photo, one a pan on a gas hob. None shows a visible weapon, so these 5 look like false alarms. Five frames is a tiny sample, not a reliability figure for the weapon model; school-zone accuracy remains unvalidated (no school footage supplied).
+
+## Latest verified state (branch sentinel-ai-repair, local checks only)
+All of these ran on a local backend (ONNX, 2 vCPU) and a local frontend. None ran on Render or Vercel production.
+- Tests: 32 backend tests pass. `next build` compiles.
+- Docker: GitHub Actions workflow `docker-lite-smoke` built `backend/Dockerfile.lite` and got model_loaded=true from /api/health (run 43702886052). The first run failed on an old pip in the export stage; fixed by upgrading pip. The full torch `backend/Dockerfile` was never built. Memory on Render is not measured.
+- Fullscreen overlay: in a browser, the canvas drew a labelled person box over the video (public Intel sample clip, not accuracy).
+- Zone editor: 4 clicks, Save, UI says "Zone saved", GET /api/camera/{id}/polygon returns the same 4 normalised points.
+- Alert feed and incident dialog: tested with an explicitly SYNTHETIC fixture ("SYNTHETIC TEST FIXTURE, not a real detection"). The card, thumbnail and dialog render. No real incident was produced, so this is not detection evidence.
+- Alerts socket: before the useWebSocket fix, 3 sockets opened and 2 stayed open on a dev page, with a "[WS] Error" console error. After the fix: 2 opened and 1 stayed open in dev (React StrictMode double mount); a production build (`next start`) opened 1 socket, kept it open, with no console messages and 1 backend connect.
+- Camera status: tiles use /api/camera/{id}/health. An offline source shows "Video source unavailable"; LIVE labels, Online badges, counters, the top-bar badge and the empty-alerts text follow it.
+- Older backend (no /api/health): degraded banner, no overlay/zone editing/metrics. Tested against the live old backend through a test-side CORS proxy only. Production CORS from the Vercel origin is unverified.
+- Not verified: Render account/service/autodeploy, Render memory, school or outgate accuracy, classroom crop on real classroom footage.
