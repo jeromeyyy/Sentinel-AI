@@ -12,8 +12,10 @@ export function useWebSocket() {
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttempts = useRef(0);
+  const disposed = useRef(false);
 
   const connect = useCallback(() => {
+    if (disposed.current) return;
     const wsUrl = getWsUrl();
     console.log('[WS] Connecting to:', wsUrl);
     
@@ -118,9 +120,14 @@ export function useWebSocket() {
   }, []);
 
   useEffect(() => {
+    disposed.current = false;
     connect();
     return () => {
-      wsRef.current?.close();
+      // Unmount (also React StrictMode's dev double-mount): detach handlers first, otherwise the
+      // closing socket's onclose schedules a reconnect and the old socket leaks.
+      disposed.current = true;
+      const ws = wsRef.current;
+      if (ws) { ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null; ws.close(); }
       clearTimeout(reconnectTimeoutRef.current);
     };
   }, [connect]);
