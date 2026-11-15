@@ -5,7 +5,7 @@ Nothing here adds paid services.
 
 ## 1. Render (backend)
 1. Push this branch to `main` of github.com/jeromeyyy/Sentinel-AI (Render auto-deploys on push if it is connected, otherwise Manual Deploy).
-2. Service settings: Environment **Docker**, Dockerfile path `backend/Dockerfile`, Docker context `.` (as in `render.yaml`), Health check path `/api/health`.
+2. Service settings: Environment **Docker**, Dockerfile path `backend/Dockerfile.lite` (torch-free, fits the free plan; use `backend/Dockerfile` only on a plan with >= 1 GB RAM, it needs torch and fire/weapon models), Docker context `.` (as in `render.yaml`). If your existing Render service already uses another Dockerfile path, check it before merging: render.yaml only applies to Blueprint-created services. Nothing was deployed or changed on Render by this repair; the Docker image build is checked only by the `docker-lite-smoke` GitHub Actions workflow if it has run (see its result on the Actions tab), Health check path `/api/health`.
 3. Environment variables:
 
 | Var | Value | Notes |
