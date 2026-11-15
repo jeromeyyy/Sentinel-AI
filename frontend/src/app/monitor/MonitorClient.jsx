@@ -28,6 +28,9 @@ import { SkeletonCameraGrid, SkeletonTable } from '@/components/ui/Skeleton';
 import { NoIncidents, NoAlerts, NoCameras, NoSearchResults } from '@/components/ui/EmptyState';
 
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { createPortal } from 'react-dom';
+import PolygonEditor from '@/components/PolygonEditor';
+import StreamTile, { StreamStatusProvider } from '@/components/StreamTile';
 import { BACKEND_URL, ZONES, PRIORITY_COLORS, EVENT_LABELS } from '@/lib/constants';
 import { cn, formatTimestamp, formatRelativeTime, formatEventType, getAlertKey, getCameraId, getEventType, fetchBackend } from '@/lib/utils';
 
@@ -45,6 +48,14 @@ const TAB_TITLES = {
 };
 
 export default function MonitorClient() {
+  return (
+    <StreamStatusProvider>
+      <MonitorClientInner />
+    </StreamStatusProvider>
+  );
+}
+
+function MonitorClientInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab');
@@ -405,14 +416,7 @@ function CameraGrid({ cameras, alerts, expandedCamera, setExpandedCamera, highli
             )}
           >
             {/* Video Feed */}
-            <img
-              src={`${BACKEND_URL}/video/${camera.id}`}
-              alt={camera.name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                e.target.src = '/placeholder-camera.svg';
-              }}
-            />
+            <StreamTile cameraId={camera.id} alt={camera.name} />
 
             {/* Top Overlay */}
             <div className="camera-overlay">
@@ -469,9 +473,10 @@ function CameraGrid({ cameras, alerts, expandedCamera, setExpandedCamera, highli
 
 // ─── Fullscreen Camera ───────────────────────────────────────────────────────
 function FullscreenCamera({ camera, onClose }) {
-  if (!camera) return null;
+  if (!camera || typeof document === 'undefined') return null;
 
   return (
+    createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -486,11 +491,8 @@ function FullscreenCamera({ camera, onClose }) {
         className="relative max-w-6xl w-full aspect-video rounded-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <img
-          src={`${BACKEND_URL}/video/${camera.id}`}
-          alt={camera.name}
-          className="w-full h-full object-contain bg-black"
-        />
+        <StreamTile cameraId={camera.id} alt={camera.name} fit="contain" clean />
+        <PolygonEditor cameraId={camera.id} />
         
         <div className="absolute top-4 left-4 flex items-center gap-3">
           <LiveIndicator />
@@ -505,6 +507,7 @@ function FullscreenCamera({ camera, onClose }) {
         </button>
       </motion.div>
     </motion.div>
+    , document.body)
   );
 }
 
@@ -539,11 +542,7 @@ function CamerasView({ cameras, loading, expandedCamera, setExpandedCamera }) {
           return (
             <Card key={camera.id} hover className="overflow-hidden">
               <div className="aspect-video relative">
-                <img
-                  src={`${BACKEND_URL}/video/${camera.id}`}
-                  alt={camera.name}
-                  className="w-full h-full object-cover"
-                />
+                <StreamTile cameraId={camera.id} alt={camera.name} />
                 <div className="absolute top-2 right-2">
                   <Badge variant={camera.active ? 'online' : 'offline'} size="sm" dot>
                     {camera.active ? 'Online' : 'Offline'}
