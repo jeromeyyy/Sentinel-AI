@@ -1,9 +1,9 @@
-"""Torch-free ByteTrack (Zhang et al., ECCV 2022) using the XYAH Kalman filter copied from Ultralytics.
+"""Torch-free ByteTrack (Zhang et al., ECCV 2022) with an independently written XYAH Kalman filter (kalman_xyah.py).
 
 Same algorithm and default thresholds as ultralytics' BYTETracker (two-stage association: high-score
 detections first, then low-score ones against the still-unmatched tracks; score-fused IoU cost; lost-track
-buffer). It is an independent compact port, not a byte-for-byte copy, so IDs can differ slightly from
-ultralytics on the same input; tests/test_bytetrack_lite.py checks it on synthetic motion only.
+buffer). It is an independent compact implementation, not a copy of Ultralytics code, so IDs can differ
+from ultralytics on the same input; tests/test_bytetrack_lite.py checks it on synthetic motion only.
 Needs only numpy and lap(x)."""
 from typing import List
 
