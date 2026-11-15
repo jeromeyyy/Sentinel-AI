@@ -21,6 +21,10 @@ export function useBackendStatus() {
         if (r.ok) {
           const j = await r.json();
           next = j.model_loaded || j.model_error ? 'ready' : 'loading-model';
+        } else if (r.status === 404) {
+          // Server is up but predates /api/health (older backend build): treat as ready,
+          // otherwise the UI would show "waking server" forever. Metrics/overlay badges stay empty.
+          next = 'ready';
         }
       } catch {}
       clearTimeout(to);
