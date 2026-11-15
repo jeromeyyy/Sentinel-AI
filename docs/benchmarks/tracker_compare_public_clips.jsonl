@@ -1,0 +1,3 @@
+{"video": "people-detection.mp4", "frames_tracked": 198, "unique_ids_ultralytics": 8, "unique_ids_lite": 8, "frames_same_track_count_pct": 100.0, "lite_tracks_matching_a_ref_box_pct": 100.0, "lite_id_maps_to_one_ref_id_pct": 100.0}
+{"video": "classroom.mp4", "frames_tracked": 328, "unique_ids_ultralytics": 4, "unique_ids_lite": 4, "frames_same_track_count_pct": 100.0, "lite_tracks_matching_a_ref_box_pct": 100.0, "lite_id_maps_to_one_ref_id_pct": 100.0}
+{"video": "store-aisle-detection.mp4", "frames_tracked": 1307, "unique_ids_ultralytics": 11, "unique_ids_lite": 14, "frames_same_track_count_pct": 99.5, "lite_tracks_matching_a_ref_box_pct": 100.0, "lite_id_maps_to_one_ref_id_pct": 100.0}
