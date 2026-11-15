@@ -114,3 +114,9 @@ Classroom clip, onnx: 27.9 ms p50, 180 MB peak, 600 person boxes. Equal counts a
 
 ## Torch-free full server (wired in): measured
 Clean venv with `requirements-lite.txt` (no torch, no ultralytics), MODEL_PATH=models/yolov8n.onnx, extra detectors off, autostart off, 2 vCPU sandbox: idle ~210 MB; after 2 cameras and viewers ~326 MB (peak 326 MB). Delivered 12.0 fps (2 viewers, 12 fps source) and 15.0 fps (30 fps source, capped); /api/health p50 ~64 ms. Raw: docs/benchmarks/torchfree_clean_venv.txt. Tracker: `bytetrack_lite.py` (torch-free ByteTrack port, unit-tested on synthetic motion only; not compared to Ultralytics IDs on real footage). Not verified on Render. No fire/smoke/weapon in this mode.
+
+## ByteTrackLite vs Ultralytics BYTETracker (same ONNX detections, FRAME_SKIP 3, public Intel clips only)
+scripts/compare_trackers.py, raw: docs/benchmarks/tracker_compare_public_clips.jsonl. people-detection: 8 vs 8 unique IDs, per-frame track count equal on 100% of 198 frames. classroom: 4 vs 4, 100% of 328. store-aisle: 11 (ultralytics) vs 14 (lite) unique IDs, count equal on 99.5% of 1307 frames. Every lite track box matched a reference box (IoU>0.5) and each lite ID mapped to a single reference ID. So the port behaves like the reference on these clips, with somewhat more ID churn on the busiest one. No ground truth: this shows agreement between two trackers, not tracking accuracy.
+
+## Weapon-model keyframe review (bounded, 5 frames, user clips, not published)
+All 5 saved weapon_detected frames were looked at by eye: three show a DVD/AV shelf (twice at the bottom-left, once a shelf under a TV), one the top of a cat photo, one a pan on a gas hob. None shows a visible weapon, so these 5 look like false alarms. Five frames is a tiny sample, not a reliability figure for the weapon model; school-zone accuracy remains unvalidated (no school footage supplied).
